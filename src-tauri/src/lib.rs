@@ -51,7 +51,9 @@ mod process_memory;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod discord_rpc;
 mod equalizer;
+#[cfg(not(target_os = "android"))]
 mod opus_source;
+
 
 // Keep the legacy service name so existing sign-in credentials survive the product rename.
 const KEYRING_SERVICE: &str = "com.ytmusicdock.app";
@@ -3134,7 +3136,7 @@ Connection: close\r\n\r\n";
             return;
         }
     };
-    let has_range = range_header.is_some();
+    let _has_range = range_header.is_some();
     let (status, start, end) = parse_media_range(range_header.as_deref(), total_len)
         .unwrap_or(("200 OK", 0, total_len.saturating_sub(1)));
 
@@ -3369,7 +3371,10 @@ const OFFLINE_CHUNK_CONCURRENCY: usize = 6;
  * purpose, they are a user-initiated bulk action rather than something a listener is waiting
  * on, and that path has not shown this failure.
  */
-static PLAYBACK_FILL_LOCK: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+static PLAYBACK_FILL_LOCK: [tokio::sync::Semaphore; 2] = [
+    tokio::sync::Semaphore::const_new(1),
+    tokio::sync::Semaphore::const_new(1),
+];
 
 /** Attempts per playback range before falling back. A 403 here is usually transient. */
 const PLAYBACK_RANGE_ATTEMPTS: usize = 3;
@@ -3979,13 +3984,27 @@ async fn fetch_audio_source(
  * than assume.
  */
 fn verify_audio_container(bytes: &[u8], mime_type: &str) -> Result<(), CommandError> {
-    if !mime_type.contains("mp4") || bytes.len() < 12 || &bytes[4..8] == b"ftyp" {
-        return Ok(());
+    if bytes.is_empty() {
+        return Err(CommandError {
+            message: "Audio stream returned 0 bytes.".to_string(),
+        });
     }
-    let preview = String::from_utf8_lossy(&bytes[..bytes.len().min(120)]).replace('\n', " ");
-    Err(CommandError {
-        message: format!("Audio download was not an MP4 file. Response started with: {preview}"),
-    })
+    if mime_type.contains("mp4") {
+        if bytes.len() >= 8 && &bytes[4..8] != b"ftyp" {
+            let preview = String::from_utf8_lossy(&bytes[..bytes.len().min(120)]).replace('\n', " ");
+            return Err(CommandError {
+                message: format!("Audio download was not an MP4 file. Response started with: {preview}"),
+            });
+        }
+    } else if mime_type.contains("webm") {
+        if bytes.len() >= 4 && &bytes[0..4] != [0x1A, 0x45, 0xDF, 0xA3] {
+            let preview = String::from_utf8_lossy(&bytes[..bytes.len().min(120)]).replace('\n', " ");
+            return Err(CommandError {
+                message: format!("Audio download was not a WebM file. Response started with: {preview}"),
+            });
+        }
+    }
+    Ok(())
 }
 
 /**
@@ -4046,7 +4065,8 @@ async fn fill_media_buffer(
      * The warmed track waits, which is the right way round: it is an optimisation, and the one
      * making sound is not.
      */
-    let _fill_permit = PLAYBACK_FILL_LOCK.acquire().await;
+    let slot_idx = slot.map(|(idx, _)| idx.min(1)).unwrap_or(0);
+    let _fill_permit = PLAYBACK_FILL_LOCK[slot_idx].acquire().await;
 
     // The wait for the permit above is where a superseded fill most likely spent its time —
     // recheck now, before spending a request on a track that moved on while this was queued.
@@ -4098,14 +4118,30 @@ async fn fill_media_buffer(
 
             match googlevideo_audio_request(&client, &ranged, cookie.as_deref()).send().await {
                 Ok(mut response) if response.status().is_success() => {
-                    let mut stream_failed = false;
-                    while let Ok(Some(chunk_bytes)) = response.chunk().await {
+                    let mut stream_succeeded = false;
+                    loop {
                         if load_superseded(slot) || buffer.lock().map(|g| g.failed).unwrap_or(true) {
                             return;
                         }
-                        if let Ok(mut guard) = buffer.lock() {
-                            guard.append_chunk_bytes(index, &chunk_bytes);
+                        match response.chunk().await {
+                            Ok(Some(chunk_bytes)) => {
+                                if let Ok(mut guard) = buffer.lock() {
+                                    guard.append_chunk_bytes(index, &chunk_bytes);
+                                }
+                            }
+                            Ok(None) => {
+                                stream_succeeded = true;
+                                break;
+                            }
+                            Err(err) => {
+                                last_error = cache_error(format!("audio stream read error: {err}"));
+                                break;
+                            }
                         }
+                    }
+
+                    if !stream_succeeded {
+                        continue;
                     }
 
                     if index == 0 {
@@ -4191,6 +4227,8 @@ enum NativeAudioSource {
         url: String,
         mime_type: String,
         cookie: Option<String>,
+        #[serde(default)]
+        content_length: Option<u64>,
     },
     /// A track already in the offline store.
     #[serde(rename_all = "camelCase")]
@@ -4225,10 +4263,13 @@ fn open_native_audio_reader(
             url,
             mime_type,
             cookie,
+            content_length,
         } => {
             let request_url = url::Url::parse(&url)
                 .map_err(|error| cache_error(format!("audio URL parse failed: {error}")))?;
-            let total = signed_content_length(&request_url).unwrap_or(0) as usize;
+            let total = signed_content_length(&request_url)
+                .or(content_length)
+                .unwrap_or(0) as usize;
             if total == 0 {
                 return Err(cache_error("audio URL declared no length"));
             }
@@ -4296,17 +4337,25 @@ fn sniffed_mime(
     declared: String,
     label: &str,
 ) -> String {
-    match opus_source::sniff_container_mime(file) {
-        Ok(Some(sniffed)) if sniffed != declared => {
-            eprintln!(
-                "[internal][tauri][info] container sniffed {} declared={} actual={}",
-                label, declared, sniffed
-            );
-            sniffed.to_string()
+    #[cfg(not(target_os = "android"))]
+    {
+        match opus_source::sniff_container_mime(file) {
+            Ok(Some(sniffed)) if sniffed != declared => {
+                eprintln!(
+                    "[internal][tauri][info] container sniffed {} declared={} actual={}",
+                    label, declared, sniffed
+                );
+                sniffed.to_string()
+            }
+            Ok(_) => declared,
+            // Unreadable here means unreadable for the decoder too; let that report it.
+            Err(_) => declared,
         }
-        Ok(_) => declared,
-        // Unreadable here means unreadable for the decoder too; let that report it.
-        Err(_) => declared,
+    }
+    #[cfg(target_os = "android")]
+    {
+        let _ = (file, label);
+        declared
     }
 }
 
@@ -4354,17 +4403,40 @@ async fn native_audio_load(
 
     let decoded = tauri::async_runtime::spawn_blocking(move || {
         /*
-         * Opus goes to libopus, everything else to rodio.
-         *
-         * Not a preference — symphonia has no Opus decoder at all, and rodio can only offer
-         * what symphonia implements. WebM/Opus is the majority of what YouTube serves at
-         * `high`, and the only audio offered for a large share of tracks, so this branch is
-         * most of playback rather than an edge case.
+         * Opus goes to libopus on desktop platforms, everything else to rodio.
          */
+        #[cfg(not(target_os = "android"))]
         if opus_source::is_opus(&mime_type) {
             return opus_source::OpusSource::new(reader, &mime_type).map(equalized);
         }
-        rodio::Decoder::new(reader)
+
+        let clean_mime = mime_type.split(';').next().unwrap_or(&mime_type).trim();
+        let hint_ext = if clean_mime.contains("mp4") {
+            Some("mp4")
+        } else if clean_mime.contains("webm") || clean_mime.contains("mkv") {
+            Some("webm")
+        } else if clean_mime.contains("ogg") {
+            Some("ogg")
+        } else if clean_mime.contains("mp3") || clean_mime.contains("mpeg") {
+            Some("mp3")
+        } else if clean_mime.contains("flac") {
+            Some("flac")
+        } else if clean_mime.contains("wav") {
+            Some("wav")
+        } else {
+            None
+        };
+
+        let mut builder = rodio::Decoder::builder().with_data(reader);
+        if !clean_mime.is_empty() {
+            builder = builder.with_mime_type(clean_mime);
+        }
+        if let Some(ext) = hint_ext {
+            builder = builder.with_hint(ext);
+        }
+
+        builder
+            .build()
             .map(equalized)
             .map_err(|error| format!("audio decode failed: {error}"))
     })
@@ -5406,14 +5478,10 @@ pub fn ensure_android_context_initialized(
     context_ptr: *mut std::ffi::c_void,
 ) {
     if !ANDROID_CONTEXT_INITIALIZED.swap(true, std::sync::atomic::Ordering::SeqCst) {
-        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        unsafe {
             ndk_context::initialize_android_context(vm_ptr, context_ptr);
-        }));
-        if res.is_ok() {
-            eprintln!("[internal][tauri][info] ndk_context successfully initialized");
-        } else {
-            eprintln!("[internal][tauri][warn] ndk_context initialization panicked or was already set");
         }
+        eprintln!("[internal][tauri][info] ndk_context successfully initialized");
     } else {
         eprintln!("[internal][tauri][info] ndk_context already initialized, skipping");
     }
@@ -5753,10 +5821,21 @@ mod tests {
         )
         .expect("stream source");
         match stream {
-            NativeAudioSource::Stream { url, mime_type, cookie } => {
+            NativeAudioSource::Stream { url, mime_type, cookie, .. } => {
                 assert!(url.contains("googlevideo"));
                 assert_eq!(mime_type, "audio/webm; codecs=\"opus\"");
                 assert_eq!(cookie.as_deref(), Some("SAPISID=x"));
+            }
+            _ => panic!("kind did not select the stream variant"),
+        }
+
+        let with_length = serde_json::from_str::<NativeAudioSource>(
+            r#"{"kind":"stream","url":"https://r1.googlevideo.com/videoplayback","mimeType":"audio/webm; codecs=\"opus\"","contentLength":1234567}"#,
+        )
+        .expect("stream with content length");
+        match with_length {
+            NativeAudioSource::Stream { content_length, .. } => {
+                assert_eq!(content_length, Some(1234567));
             }
             _ => panic!("kind did not select the stream variant"),
         }
@@ -6091,6 +6170,34 @@ mod tests {
         let no_clen =
             url::Url::parse("https://rr6.googlevideo.com/videoplayback?itag=140").expect("parses");
         assert_eq!(signed_content_length(&no_clen), None);
+    }
+
+    #[test]
+    fn test_fetch_real_googlevideo_url() {
+        let url_str = match std::fs::read_to_string("test_url.txt") {
+            Ok(s) => s.trim().to_string(),
+            Err(_) => return,
+        };
+        let request_url = url::Url::parse(&url_str).expect("parse url");
+        eprintln!("signed_googlevideo_local_address: {:?}", super::signed_googlevideo_local_address(&request_url));
+        let client = super::offline_http_client(&request_url).map_err(|e| e.message).unwrap();
+        let ranged = super::audio_url_with_range(&url_str, 0, 98303);
+        tauri::async_runtime::block_on(async {
+            let resp = super::googlevideo_audio_request(&client, &ranged, None).send().await;
+            eprintln!("resp result: {:?}", resp.as_ref().map(|r| r.status()));
+            match resp {
+                Ok(r) => {
+                    let status = r.status();
+                    let bytes = r.bytes().await.unwrap();
+                    eprintln!("status: {}, bytes len: {}", status, bytes.len());
+                    assert!(status.is_success());
+                }
+                Err(e) => {
+                    eprintln!("fetch error: {e}");
+                    panic!("request failed: {e}");
+                }
+            }
+        });
     }
 
 

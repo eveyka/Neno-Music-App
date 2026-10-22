@@ -21,8 +21,8 @@ android {
         applicationId = "com.neno.desktop"
         minSdk = 26
         targetSdk = 36
-        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "2").toInt()
-        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.3")
+        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "5").toInt()
+        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.5")
     }
     buildTypes {
         getByName("debug") {
@@ -47,7 +47,6 @@ android {
                     .plus(getDefaultProguardFile("proguard-android-optimize.txt"))
                     .toList().toTypedArray()
             )
-            // Strip everything that is not needed at runtime.
             packaging {
                 resources {
                     excludes += setOf(
@@ -62,14 +61,6 @@ android {
                         "DebugProbesKt.bin",
                         "kotlin-tooling-metadata.json",
                     )
-                }
-            }
-            // R8 full mode: more aggressive dead-code elimination, class merging, and
-            // inlining vs the default compat mode. Noticeably smaller DEX and faster ART
-            // compilation on first launch.
-            optimization {
-                keepRules {
-                    ignoreExternalDependencies("*")
                 }
             }
         }

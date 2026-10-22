@@ -148,6 +148,18 @@ function shuffle<T>(items: readonly T[]): T[] {
   return result;
 }
 
+const MOOD_FILTERS = [
+  { id: "all", label: "✨ For You", query: "trending music" },
+  { id: "relax", label: "☕ Relax & Chill", query: "lofi chill beats" },
+  { id: "energy", label: "⚡ Workout & Energy", query: "workout energetic music" },
+  { id: "focus", label: "🎯 Focus", query: "deep focus instrumental study music" },
+  { id: "party", label: "🎉 Party", query: "party dance songs" },
+  { id: "romance", label: "💖 Romance", query: "romantic love songs" },
+  { id: "bollywood", label: "🌟 Bollywood", query: "bollywood top hits" },
+  { id: "punjabi", label: "🔥 Punjabi", query: "punjabi latest songs" },
+  { id: "indie", label: "🌿 Indie & Acoustic", query: "indie pop acoustic songs" },
+];
+
 function uniqueTracks(tracks: readonly Track[]): Track[] {
   return [...new Map(tracks.map((track) => [track.id, track])).values()];
 }
@@ -196,11 +208,20 @@ export function HomePage({
   const { openTrackMenu } = useTrackContextMenu();
   const showMadeForYou = useMadeForYouVisible();
   const showYtmHomeFeed = useYtmHomeFeedVisible();
+  const [selectedMood, setSelectedMood] = useState<string>("all");
   const recentlyPlayed = useMemo(
     () => libraryState.library?.recentlyPlayed ?? EMPTY_TRACKS,
     [libraryState.library],
   );
   const recentTrackKey = recentlyPlayed.map((track) => track.id).join(":");
+
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return "Good morning";
+    if (hour >= 12 && hour < 17) return "Good afternoon";
+    if (hour >= 17 && hour < 22) return "Good evening";
+    return "Night vibes";
+  }, []);
   /*
    * Computed before the state below, not after, so the initial render can read the cache under
    * the key writes actually use. It previously seeded from `tabId` alone — a key nothing ever
@@ -521,6 +542,35 @@ export function HomePage({
     suggestionCacheKey,
   ]);
 
+  const handleMoodSelect = useCallback(
+    async (moodId: string) => {
+      setSelectedMood(moodId);
+      if (moodId === "all") {
+        if (persistentSuggestions && persistentSuggestions.length > 0) {
+          setSuggestions(persistentSuggestions);
+          return;
+        }
+        void handleRefresh();
+        return;
+      }
+      const mood = MOOD_FILTERS.find((m) => m.id === moodId);
+      if (!mood) return;
+
+      setIsLoadingSuggestions(true);
+      try {
+        const results = await searchController.searchTracks(mood.query);
+        if (results && results.length > 0) {
+          setSuggestions(shuffle(results).slice(0, 36));
+        }
+      } catch (err) {
+        logInternalError("HomePage.handleMoodSelect failed", err);
+      } finally {
+        setIsLoadingSuggestions(false);
+      }
+    },
+    [handleRefresh, searchController],
+  );
+
   const compactRecent = useMemo(
     () => recentPlays.slice(0, RECENT_COMPACT_COUNT),
     [recentPlays],
@@ -558,13 +608,13 @@ export function HomePage({
       }`}
     >
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-lg font-bold text-foreground">Made for you</h3>
+        <h3 className="text-xl font-bold tracking-tight text-foreground">Made for you</h3>
         {!isMobile && (
           <button
             type="button"
             onClick={() => void handleRefresh()}
             disabled={isRefreshing}
-            className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:bg-card hover:text-foreground active:scale-95 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-full bg-card/40 backdrop-blur-xl border border-white/[0.08] px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:bg-card/70 hover:border-white/[0.2] hover:text-foreground active:scale-95 disabled:opacity-50 shadow-xs"
             aria-label="Refresh recommendations"
           >
             <RefreshIcon size={14} className={cn(isRefreshing && "animate-spin text-primary")} />
@@ -649,7 +699,7 @@ export function HomePage({
   );
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-7 pb-8">
+    <div className="flex flex-col gap-5 sm:gap-7 pb-8">
       {isMobile && onOpenSearch && (
         <MobileHeader
           onOpenSearch={onOpenSearch}
@@ -660,8 +710,44 @@ export function HomePage({
         />
       )}
 
+      {/* ── Glass Greeting & Mood Chips Header ──────────────────────────── */}
+      <div className="flex flex-col gap-3.5 pt-0.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground drop-shadow-xs">
+              {greeting}
+              {libraryState.library?.account?.name ? (
+                <span className="text-primary font-bold">, {libraryState.library.account.name.split(" ")[0]}</span>
+              ) : null}
+            </h1>
+          </div>
+        </div>
+
+        {/* Interactive Glass Mood / Vibe Filter Pills */}
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar snap-x touch-pan-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {MOOD_FILTERS.map((mood) => {
+            const isSelected = selectedMood === mood.id;
+            return (
+              <button
+                key={mood.id}
+                type="button"
+                onClick={() => void handleMoodSelect(mood.id)}
+                className={cn(
+                  "shrink-0 snap-start rounded-full px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 shadow-xs cursor-pointer select-none",
+                  isSelected
+                    ? "bg-primary text-primary-foreground shadow-[0_0_16px_rgba(255,0,51,0.45)] ring-1 ring-white/30"
+                    : "bg-card/40 backdrop-blur-xl border border-white/[0.08] text-muted-foreground hover:bg-card/70 hover:border-white/[0.18] hover:text-foreground",
+                )}
+              >
+                {mood.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {libraryState.status === "signed-out" && (
-        <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl bg-card/80 border border-border/50 p-4 shadow-sm">
+        <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl bg-card/40 backdrop-blur-xl border border-white/[0.08] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.18)]">
           <div className="flex flex-col gap-0.5">
             <h2 className="text-base font-bold text-foreground">You&apos;re not signed in</h2>
             <p className="text-xs sm:text-sm text-muted-foreground">Sign in to access your YouTube Music history, playlists, and albums.</p>
@@ -676,10 +762,13 @@ export function HomePage({
         </section>
       )}
 
-      {/* ── 1. Made for you ──────────────────────────────────────────────── */}
+      {/* ── 1. Library & Browse Glass Destinations ─────────────────────── */}
+      <HomeDestinations {...destinations} />
+
+      {/* ── 2. Made for you ──────────────────────────────────────────────── */}
       {showMadeForYou && madeForYouSection}
 
-      {/* ── 2. Speed dial (Only when signed in) ─────────────────────────── */}
+      {/* ── 3. Speed dial (Only when signed in) ─────────────────────────── */}
       {libraryState.status === "ready" && speedDialItems.length > 0 && (
         <SpeedDialSection
           items={speedDialItems}
@@ -693,10 +782,7 @@ export function HomePage({
         />
       )}
 
-      {/* ── 3. Library & Browse Destinations ─────────────────────────────── */}
-      <HomeDestinations {...destinations} />
-
-      {/* ── 3. Quick Picks ───────────────────────────────────────────────── */}
+      {/* ── 4. Quick Picks ───────────────────────────────────────────────── */}
       {showYtmHomeFeed && libraryState.status === "ready" && (
         <div className="flex flex-col gap-8">
           {isLoadingHomeFeed && !ytmHomeFeed && (
@@ -720,7 +806,7 @@ export function HomePage({
         </div>
       )}
 
-      {/* ── 4. Remaining YouTube Music shelves (From the community, etc.) ─── */}
+      {/* ── 5. Remaining YouTube Music shelves (From the community, etc.) ─── */}
       {showYtmHomeFeed && libraryState.status === "ready" && remainingShelves.length > 0 && (
         <div className="flex flex-col gap-8">
           <BrowseShelves
@@ -744,7 +830,7 @@ export function HomePage({
             {Array.from({ length: RECENT_COMPACT_COUNT }, (_, index) => (
               <div
                 key={index}
-                className="flex items-center gap-2.5 rounded-xl border border-border/20 bg-card/25 p-1.5 animate-pulse"
+                className="flex items-center gap-2.5 rounded-xl border border-white/[0.06] bg-card/25 p-1.5 animate-pulse"
               >
                 <div
                   className="size-11 shrink-0 rounded-lg bg-foreground/10"
@@ -784,7 +870,7 @@ export function HomePage({
             {compactRecent.map((track) => (
               <div
                 key={track.id}
-                className="group/recent relative flex items-center gap-2.5 rounded-xl border border-border/35 bg-card p-1.5 text-left transition-all hover:border-border/70 active:scale-[0.97] overflow-hidden"
+                className="group/recent relative flex items-center gap-2.5 rounded-2xl border border-white/[0.08] bg-card/40 backdrop-blur-xl p-1.5 text-left transition-all duration-300 hover:border-white/[0.22] hover:bg-card/70 hover:shadow-[0_4px_20px_rgba(0,0,0,0.22)] active:scale-[0.97] overflow-hidden"
               >
                 <button
                   type="button"
@@ -792,7 +878,7 @@ export function HomePage({
                   onContextMenu={(event) => openTrackMenu(event, track)}
                   onClick={() => playTrack(track, recentPlays)}
                 >
-                  <div className="relative size-11 shrink-0 overflow-hidden rounded-lg shadow-xs">
+                  <div className="relative size-11 shrink-0 overflow-hidden rounded-xl shadow-xs">
                     <TrackArtwork
                       className="size-full object-cover"
                       size={44}

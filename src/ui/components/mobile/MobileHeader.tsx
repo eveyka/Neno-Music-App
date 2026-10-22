@@ -53,13 +53,10 @@ function MobileHeaderInner({
         className="flex items-center gap-2 cursor-pointer select-none shrink-0"
       >
         <div className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-card border border-white/10 shadow-xs">
-          <img src={appIcon} alt="Neno" className="size-5.5 object-contain" />
+          <img src={appIcon} alt="Music" className="size-5.5 object-contain" />
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-[15px] font-extrabold tracking-tight text-foreground leading-none">
-            Neno
-          </span>
-          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary tracking-wide uppercase">
+          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary tracking-wide uppercase">
             Music
           </span>
         </div>

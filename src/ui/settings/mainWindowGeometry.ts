@@ -15,6 +15,7 @@ import {
 } from "../../internal/durableLocalSetting";
 import { removeAppSetting } from "../../internal/appSettings";
 import { logInternalError } from "../../internal/logging";
+import { isMobileDevice } from "../platform";
 
 const STORAGE_KEY = "main-window-geometry";
 const GEOMETRY_ENABLED_STORAGE_KEY = "main-window-geometry-persistence-enabled";
@@ -122,6 +123,7 @@ function clearSavedMainWindowGeometry(): void {
 }
 
 export async function hydrateMainWindowGeometry(): Promise<void> {
+  if (isMobileDevice) return;
   await Promise.all([
     hydrateLocalJsonSetting(STORAGE_KEY, isMainWindowGeometry),
     hydrateLocalBooleanSetting(
@@ -140,7 +142,7 @@ export async function hydrateMainWindowGeometry(): Promise<void> {
 }
 
 export async function restoreMainWindowGeometry(): Promise<void> {
-  if (!readMainWindowGeometryPersistenceEnabled()) return;
+  if (isMobileDevice || !readMainWindowGeometryPersistenceEnabled()) return;
 
   const geometry = readLocalJsonSetting(STORAGE_KEY, isMainWindowGeometry);
   if (!geometry || !hasSavedPosition(geometry) || !await isGeometryOnAnyMonitor(geometry)) return;
@@ -151,6 +153,7 @@ export async function restoreMainWindowGeometry(): Promise<void> {
 }
 
 export async function persistMainWindowGeometry(): Promise<() => void> {
+  if (isMobileDevice) return () => {};
   const win = getCurrentWindow();
   let saveTimer: number | null = null;
 

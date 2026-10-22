@@ -1,4 +1,4 @@
-import { useEffect, useRef, memo, useMemo } from "react";
+import { useEffect, useRef, memo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import {
@@ -10,9 +10,10 @@ import {
 } from "@/ui/icons";
 import { SpinnerSteps } from "@/components/motion/loader";
 import {
+  libraryController,
   playerController,
   shallowEqual,
-  useLibraryState,
+  useLibrarySelector,
   usePlayerSelector,
 } from "../../../player/playerStore";
 import { TrackArtwork } from "../TrackArtwork";
@@ -74,7 +75,6 @@ export function MobilePlayerBarInner({ onOpenNowPlaying, className }: MobilePlay
     }),
     shallowEqual,
   );
-  const libraryState = useLibraryState();
   const { toggleTrackLike } = useTrackContextMenu();
 
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
@@ -83,13 +83,12 @@ export function MobilePlayerBarInner({ onOpenNowPlaying, className }: MobilePlay
   const isPlaying = state.status === "playing";
   const isLoading = state.status === "loading";
 
-  if (!currentTrack) return null;
+  // Fast O(1) selector instead of re-rendering on every library state update
+  const isLiked = useLibrarySelector(
+    () => (currentTrack ? libraryController.isTrackLiked(currentTrack.id) : false),
+  );
 
-  // O(1) lookup using a Set instead of O(n) .some() scan on every render
-  const isLiked = useMemo(() => {
-    const likedIds = new Set(libraryState.library?.likedSongs.map((t) => t.id));
-    return likedIds.has(currentTrack.id);
-  }, [libraryState.library?.likedSongs, currentTrack.id]);
+  if (!currentTrack) return null;
 
   const handlePlayPause = (e: React.MouseEvent) => {
     e.stopPropagation();

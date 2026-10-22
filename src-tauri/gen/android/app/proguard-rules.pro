@@ -1,29 +1,25 @@
 # Custom Proguard rules for Neno Music Android App
 
+# Keep all Tauri runtime classes and plugins
+-keep class app.tauri.** { *; }
+-keep interface app.tauri.** { *; }
+
+# Keep all app classes
+-keep class com.neno.desktop.** { *; }
+-keep interface com.neno.desktop.** { *; }
+
 # Keep all JavascriptInterface annotations and methods for WebView <-> JS Bridge
--keepattributes *Annotation*
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
 -keepattributes JavascriptInterface
 -keepclassmembers class * {
+    native <methods>;
     @android.webkit.JavascriptInterface <methods>;
 }
 
-# Keep the WebAppInterface and its methods used by AndroidMediaBridge
--keep class com.neno.desktop.MainActivity$WebAppInterface {
-    public <methods>;
-}
-
-# Keep MediaPlaybackService and its public members for background audio playback & notifications
--keep class com.neno.desktop.MediaPlaybackService {
-    public <methods>;
-}
-
-# Keep AndroidX Media and MediaSession classes
+# Keep AndroidX Media, MediaSession, and Notifications classes
 -keep class androidx.media.** { *; }
 -keep class android.support.v4.media.** { *; }
-
-# Strip verbose/debug logging calls in release builds if desired, but keep crash handlers
--assumenosideeffects class android.util.Log {
-    public static boolean isLoggable(java.lang.String, int);
-    public static int v(...);
-    public static int d(...);
-}
+-keep class androidx.webkit.** { *; }
+-keep class androidx.core.app.** { *; }
+-dontwarn androidx.webkit.**
+-dontwarn android.support.v4.media.**

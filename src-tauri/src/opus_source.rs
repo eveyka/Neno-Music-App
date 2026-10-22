@@ -241,7 +241,9 @@ impl OpusSource {
                 Err(SymphoniaError::IoError(error))
                     if error.kind() == std::io::ErrorKind::TimedOut =>
                 {
-                    continue;
+                    eprintln!("[internal][tauri][warn] opus demux read timed out after 35s, ending track");
+                    self.exhausted = true;
+                    return false;
                 }
                 Err(error) => {
                     eprintln!("[internal][tauri][warn] opus demux ended: {error}");
@@ -469,4 +471,24 @@ mod tests {
             "a degenerate time base is unknown, not a panic — calc_time asserts on it",
         );
     }
+
+    #[test]
+    fn test_probe_real_youtube_chunk() {
+        let chunk = match std::fs::read("test_chunk0.webm") {
+            Ok(c) => c,
+            Err(_) => return, // file not present
+        };
+        let total = 1_231_355;
+        let mut buffer = crate::MediaBuffer::pending(total, 2);
+        buffer.put(0, chunk);
+        let buf_ref = std::sync::Arc::new(std::sync::Mutex::new(buffer));
+        let reader = Box::new(crate::audio::BufferReader::new(buf_ref));
+        let res = super::OpusSource::new(reader, "audio/webm; codecs=\"opus\"");
+        eprintln!("test_probe_real_youtube_chunk result: {:?}", res.is_ok());
+        if let Err(e) = &res {
+            eprintln!("probe error: {e}");
+        }
+        assert!(res.is_ok(), "probe should succeed on head chunk");
+    }
 }
+

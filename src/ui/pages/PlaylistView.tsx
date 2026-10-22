@@ -25,17 +25,6 @@ import { useKeyboardShortcuts } from "../settings/keyboardShortcuts";
 import { shouldStartPageSearch } from "./pageSearchKeyboard";
 import { collectTrackPages } from "./collectTrackPages";
 
-/*
- * Collapsed search affordance that widens on hover/focus or while it holds a query —
- * the behaviour the original .playlistSearch width transition provided.
- */
-const SEARCH_FIELD =
-  "group/search flex min-h-8 items-center gap-1.5 overflow-hidden rounded-full bg-white/[0.04] px-2.5 " +
-  "text-muted-foreground transition-[width,background-color] duration-200 cursor-text " +
-  "hover:bg-white/[0.08] focus-within:bg-white/[0.08] focus-within:text-foreground " +
-  "[&_input]:min-w-0 [&_input]:flex-1 [&_input]:bg-transparent [&_input]:text-sm " +
-  "[&_input]:text-foreground [&_input]:outline-none [&_input]:placeholder:text-muted-foreground";
-const SEARCH_FIELD_COLLAPSED = "w-9 hover:w-56 focus-within:w-56";
 
 /*
  * Ceiling on a whole-playlist sweep. At YouTube page sizes this is far more than any real
@@ -739,7 +728,7 @@ export function PlaylistView({ playlist, playerController, libraryController }: 
   };
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <div onContextMenu={(event) => openPlaylistMenu(event, playlist)}>
         <MediaHeader
           eyebrow="Playlist"
@@ -829,48 +818,49 @@ export function PlaylistView({ playlist, playerController, libraryController }: 
       {!error && (isLoading || tracks.length > 0 || hasMoreTracks) && (
         <>
           <div
-            className="flex flex-wrap items-center gap-1.5 self-start [&>button]:flex [&>button]:min-h-8 [&>button]:min-w-0 [&>button]:items-center [&>button]:justify-center [&>button]:gap-1.5 [&>button]:rounded-full [&>button]:bg-white/[0.04] [&>button]:px-3 [&>button]:text-sm [&>button]:font-medium [&>button]:text-muted-foreground [&>button]:transition-colors hover:[&>button]:bg-white/[0.08] hover:[&>button]:text-foreground focus-visible:[&>button]:outline-none focus-visible:[&>button]:ring-2 focus-visible:[&>button]:ring-ring"
+            className="flex items-center gap-1.5 sm:gap-2 w-full overflow-x-auto no-scrollbar py-1 self-start"
             role="group"
             aria-label="Playlist song tools"
           >
-            {playlistSorts.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                className={sort === item.value ? "bg-primary/15 text-foreground" : ""}
-                aria-pressed={sort === item.value}
-                aria-label={`Sort by ${item.label} ${
-                  sort === item.value ? getDirectionLabel(item.value, sortDirection) : ""
-                }`.trim()}
-                onClick={() => selectSort(item.value)}
-              >
-                <span>{item.label}</span>
-                {sort === item.value && (
-                  <span
-                    className={`${"flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"} ${
-                      item.value === "dateAdded" ? "flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" : ""
-                    }`}
-                    aria-hidden="true"
-                  >
-                    <span className="shrink-0">
+            {playlistSorts.map((item) => {
+              const isActive = sort === item.value;
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  className={cn(
+                    "flex shrink-0 h-8 items-center gap-1.5 rounded-full px-3.5 text-xs sm:text-sm font-medium transition-all select-none border",
+                    isActive
+                      ? "bg-primary/20 border-primary/40 text-primary font-semibold shadow-sm"
+                      : "bg-white/[0.04] border-white/[0.08] text-muted-foreground hover:bg-white/[0.08] hover:text-foreground",
+                  )}
+                  aria-pressed={isActive}
+                  aria-label={`Sort by ${item.label} ${
+                    isActive ? getDirectionLabel(item.value, sortDirection) : ""
+                  }`.trim()}
+                  onClick={() => selectSort(item.value)}
+                >
+                  <span>{item.label}</span>
+                  {isActive && (
+                    <span className="shrink-0 text-primary">
                       <SortDirectionIcon direction={sortDirection} />
                     </span>
-                    {item.value === "dateAdded" && (
-                      <span className="sr-only">
-                        {getDirectionLabel(item.value, sortDirection)}
-                      </span>
-                    )}
-                  </span>
-                )}
-              </button>
-            ))}
+                  )}
+                </button>
+              );
+            })}
             <div
-              className={cn(SEARCH_FIELD, playlistSearchQuery ? "w-56" : SEARCH_FIELD_COLLAPSED)}
+              className={cn(
+                "group/search flex shrink-0 h-8 items-center gap-1.5 overflow-hidden rounded-full border px-2.5 transition-[width,background-color] duration-200 cursor-text",
+                playlistSearchQuery
+                  ? "w-52 sm:w-60 bg-card border-white/20 text-foreground"
+                  : "w-8.5 sm:w-9 bg-white/[0.04] border-white/[0.08] text-muted-foreground hover:bg-white/[0.08] hover:w-52 sm:hover:w-60 focus-within:w-52 sm:focus-within:w-60 focus-within:bg-card focus-within:text-foreground",
+              )}
               role="search"
               onClick={() => playlistSearchInputRef.current?.focus()}
             >
               <span className="shrink-0">
-                <SearchIcon size={16} aria-hidden="true" />
+                <SearchIcon size={15} aria-hidden="true" />
               </span>
               <input
                 ref={playlistSearchInputRef}
@@ -878,17 +868,21 @@ export function PlaylistView({ playlist, playerController, libraryController }: 
                 value={playlistSearchQuery}
                 aria-label="Search songs in playlist"
                 placeholder="Search playlist"
+                className="min-w-0 flex-1 bg-transparent text-xs sm:text-sm text-foreground outline-none placeholder:text-muted-foreground"
                 onChange={(event) => setPlaylistSearchQuery(event.target.value)}
                 onKeyDown={handlePlaylistSearchKeyDown}
               />
               {playlistSearchQuery && (
                 <button
-                  className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
                   type="button"
                   aria-label="Clear playlist search"
-                  onClick={() => setPlaylistSearchQuery("")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPlaylistSearchQuery("");
+                  }}
                 >
-                  <CloseIcon size={14} aria-hidden="true" />
+                  <CloseIcon size={12} aria-hidden="true" />
                 </button>
               )}
             </div>

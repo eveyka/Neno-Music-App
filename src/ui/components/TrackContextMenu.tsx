@@ -8,7 +8,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { AlbumIcon, CheckIcon, CloseIcon, CompassIcon, DownloadIcon, HeartActiveIcon, HeartIcon, ListIcon, PencilIcon, PlaylistAddIcon, PlaylistIcon, RadioIcon, SearchIcon, ShareIcon, SkipNextIcon, TrashIcon } from "@/ui/icons";
+import { AlbumIcon, CheckIcon, CloseIcon, CompassIcon, DislikeActiveIcon, DownloadIcon, HeartActiveIcon, HeartIcon, ListIcon, PencilIcon, PlaylistAddIcon, PlaylistIcon, RadioIcon, SearchIcon, ShareIcon, SkipNextIcon, TrashIcon } from "@/ui/icons";
 import type { Playlist, Track, TrackRating } from "../../datasource/types";
 import {
   TrackContextMenuContext,
@@ -831,15 +831,34 @@ export function TrackContextMenuProvider({
       )}
 
       {toast && (
-        <div className="fixed bottom-28 left-1/2 z-[110] flex -translate-x-1/2 items-center gap-2 rounded-full bg-popover/95 px-4 py-2 text-sm text-foreground shadow-2xl backdrop-blur" role="status">
+        <div
+          className="fixed top-14 sm:top-8 left-1/2 -translate-x-1/2 z-[250] flex items-center gap-2.5 rounded-full bg-neutral-900/95 dark:bg-zinc-950/95 px-4 py-2 text-sm font-medium text-white shadow-[0_16px_40px_rgba(0,0,0,0.7)] border border-white/15 backdrop-blur-2xl pointer-events-none select-none whitespace-nowrap animate-in fade-in slide-in-from-top-4 duration-200"
+          role="status"
+        >
           {addingPlaylistId || isRemovingTrack || isLikeMutationPending ? (
-            <Loader variant="spinner" size={18} />
-          ) : toast === "Already in playlist" ? (
-            <CloseIcon size={16} aria-hidden="true" />
-          ) : (toast.startsWith("Added ") || toast.includes("will play next") || toast === "Link copied" || toast.startsWith("Removed from ")) && (
-            <CheckIcon size={18} aria-hidden="true" />
-          )}
-          <span>{toast}</span>
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
+              <Loader variant="spinner" size={14} />
+            </div>
+          ) : toast.includes("Liked") || toast.toLowerCase().includes("like") ? (
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-rose-500/20 text-rose-500 border border-rose-500/30">
+              <HeartActiveIcon size={14} className="fill-rose-500" />
+            </div>
+          ) : toast === "Disliked" ? (
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+              <DislikeActiveIcon size={14} />
+            </div>
+          ) : toast === "Already in playlist" || toast.startsWith("Removed") || toast.includes("cleared") ? (
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/70 border border-white/15">
+              <CloseIcon size={12} aria-hidden="true" />
+            </div>
+          ) : (toast.startsWith("Added ") || toast.includes("will play next") || toast === "Link copied" || toast.includes("download") || toast.startsWith("Saved ")) ? (
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <CheckIcon size={14} aria-hidden="true" />
+            </div>
+          ) : null}
+          <span className="text-xs sm:text-sm font-semibold tracking-wide text-white">
+            {toast}
+          </span>
         </div>
       )}
     </TrackContextMenuContext.Provider>

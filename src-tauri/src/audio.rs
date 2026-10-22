@@ -40,7 +40,7 @@ const TICK: Duration = Duration::from_millis(250);
 const FADE_STEP: Duration = Duration::from_millis(20);
 
 /// How long a decoder read waits for bytes that have not landed yet before giving up.
-const READ_TIMEOUT: Duration = Duration::from_secs(20);
+const READ_TIMEOUT: Duration = Duration::from_secs(35);
 /// Poll interval while waiting on the download. Short enough to be inaudible and instantaneous.
 const READ_POLL: Duration = Duration::from_millis(2);
 

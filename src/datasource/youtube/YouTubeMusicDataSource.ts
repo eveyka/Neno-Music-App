@@ -519,41 +519,6 @@ export class YouTubeMusicDataSource extends DataSource {
     } as const;
   }
 
-  /**
-   * Rewrites `cver` to the client version this session actually used.
-   *
-   * youtubei.js stamps `cver` from its own bundled constant whenever it deciphers a URL, while
-   * refreshMusicClientMetadata replaces the live session's version with the one scraped off
-   * music.youtube.com. The two disagree by however stale the installed youtubei.js is — a
-   * February 2025 constant against a current session — so the /player call signs the URL as one
-   * client and the media request then claims to be another. googlevideo answers that with a bare
-   * 403 and no body, which is indistinguishable from every other rejection it issues.
-   *
-   * Safe to rewrite: `cver` is not covered by the signature. youtubei.js sets it *after*
-   * deciphering, which it could not do if `sig` depended on it.
-   */
-  private withSessionClientVersion(streamUrl: string, client: Innertube): string {
-    const sessionVersion = client.session.context.client.clientVersion;
-    if (!sessionVersion) return streamUrl;
-
-    /*
-     * String surgery rather than URL/URLSearchParams: re-serialising the query re-encodes values
-     * that are already percent-exact — `xpc=EgVo2aDSNQ==` would come back as `%3D%3D` — and a
-     * signed URL does not survive being normalised.
-     */
-    const rewritten = streamUrl.replace(
-      /([?&]cver=)[^&]*/,
-      `$1${encodeURIComponent(sessionVersion)}`,
-    );
-    if (rewritten === streamUrl) return streamUrl;
-
-    logInternalInfo("YouTubeMusicDataSource.cver rewritten", {
-      from: streamUrl.match(/[?&]cver=([^&]*)/)?.[1] ?? null,
-      to: sessionVersion,
-    });
-    return rewritten;
-  }
-
   private async createMusicClient(retrievePlayer = true): Promise<Innertube> {
     const client = await Innertube.create({
       ...this.getSessionOptions(retrievePlayer),
@@ -618,7 +583,7 @@ export class YouTubeMusicDataSource extends DataSource {
           retrieve_innertube_config: false,
         });
 
-        return Innertube.create({
+        const client = await Innertube.create({
           fetch: tauriFetch,
           retrieve_player: true,
           generate_session_locally: false,
@@ -626,6 +591,8 @@ export class YouTubeMusicDataSource extends DataSource {
           visitor_data: bootstrap.session.context.client.visitorData,
           client_type: ClientType.MUSIC,
         });
+        await this.refreshMusicClientMetadata(client);
+        return client;
       })().catch((error) => {
         this.downloadClientPromise = null;
         throw error;
@@ -5757,7 +5724,7 @@ export class YouTubeMusicDataSource extends DataSource {
         // Already deciphered — getStreamingData runs decipher internally and assigns the result
         // to format.url, so `pot` and the transformed `n` are on it. Deciphering again would
         // re-transform an already-transformed `n` and earn a 403.
-        const url = this.withSessionClientVersion((format as any).url as string, yt);
+        const url = (format as any).url as string;
 
         if (!url) {
           throw new Error("YouTube.js returned an empty stream URL.");
@@ -5800,7 +5767,7 @@ export class YouTubeMusicDataSource extends DataSource {
     track: Track,
     quality: AudioQuality,
     clientOrder: readonly ClientLabel[],
-  ): Promise<{ url: string; mimeType: string; cookie?: string }> {
+  ): Promise<{ url: string; mimeType: string; cookie?: string; contentLength?: number }> {
     const cacheKey = `${track.id}:${quality}:${clientOrder.join(",")}`;
     const cached = getCachedStreamUrl(cacheKey);
     if (cached) {
@@ -5815,7 +5782,8 @@ export class YouTubeMusicDataSource extends DataSource {
 
     const resolvePromise = (async () => {
       let streamUrl: string | null = null;
-      let streamMimeType = "audio/mp4";
+      let streamMimeType = "audio/webm; codecs=\"opus\"";
+      let streamContentLength: number | undefined = undefined;
 
       for (const label of clientOrder) {
         try {
@@ -5838,9 +5806,17 @@ export class YouTubeMusicDataSource extends DataSource {
           const mp4Formats = audioFormats.filter(
             (candidate: any) => candidate.mime_type.includes("audio/mp4"),
           );
-          const candidates = quality === "high" || mp4Formats.length === 0
-            ? audioFormats
-            : mp4Formats;
+          const webmFormats = audioFormats.filter(
+            (candidate: any) => candidate.mime_type.includes("audio/webm"),
+          );
+          // For Rust native playback, Opus in WebM streams progressively from chunk 0 via opus_source
+          // on desktop. On Android, rodio/symphonia natively decodes AAC-in-MP4 (symphonia has no Opus codec
+          // and libopus is desktop-only). Native HTMLAudio on Android also prefers hardware-accelerated MP4/AAC.
+          const isRust = usesRustAudioEngine();
+          const preferWebm = isRust && !isAndroid;
+          const candidates = preferWebm
+            ? (webmFormats.length > 0 ? webmFormats : audioFormats)
+            : (mp4Formats.length > 0 ? mp4Formats : (webmFormats.length > 0 ? webmFormats : audioFormats));
           const format = selectFormatForQuality(candidates as Array<{ bitrate?: number }>, quality) as
             | (typeof candidates)[number]
             | undefined;
@@ -5854,33 +5830,34 @@ export class YouTubeMusicDataSource extends DataSource {
             );
           }
 
-          // Micro-scoped lock: only format.decipher touches yt.session.player.po_token.
+          // Micro-scoped lock: format.decipher touches yt.session.player.po_token and yt.session.po_token.
           // The lock is held for <0.1ms (local JS decipher) rather than across network requests.
-          let decipheredUrl: string | null = null;
-          if (poToken && (label === "download" || label === "music")) {
-            decipheredUrl = await this.withDownloadLock(async () => {
-              yt.session.po_token = poToken;
+          // CRITICAL: We MUST always clear po_token in a finally block so stale tokens are NEVER
+          // attached to subsequent tracks or watch requests, which causes 403 Forbidden after ~1 MB.
+          const decipheredUrl: string | null = await this.withDownloadLock(async () => {
+            try {
+              yt.session.po_token = poToken || undefined;
               if (yt.session.player) {
-                yt.session.player.po_token = poToken;
+                yt.session.player.po_token = poToken || undefined;
               }
-              return this.withSessionClientVersion(
-                await format.decipher(yt.session.player),
-                yt,
-              );
-            });
-          } else {
-            decipheredUrl = this.withSessionClientVersion(
-              await format.decipher(yt.session.player),
-              yt,
-            );
-          }
+              return await format.decipher(yt.session.player);
+            } finally {
+              yt.session.po_token = undefined;
+              if (yt.session.player) {
+                yt.session.player.po_token = undefined;
+              }
+            }
+          });
 
           if (!decipheredUrl) {
-            throw new Error("YouTube returned an empty MP4 audio URL.");
+            throw new Error("YouTube returned an empty audio URL.");
           }
 
           streamUrl = decipheredUrl;
-          streamMimeType = (format as any).mime_type ?? "audio/mp4";
+          streamMimeType = (format as any).mime_type ?? "audio/webm; codecs=\"opus\"";
+          streamContentLength = (format as any).content_length
+            ? Number((format as any).content_length)
+            : undefined;
           logInternalInfo("YouTubeMusicDataSource.getStreamData format selected", {
             trackId: track.id,
             client: label,
@@ -5914,6 +5891,7 @@ export class YouTubeMusicDataSource extends DataSource {
         url: streamUrl,
         mimeType: streamMimeType,
         cookie: this.musicCookie ?? undefined,
+        contentLength: streamContentLength,
       };
       setCachedStreamUrl(cacheKey, resolved);
       return resolved;
@@ -5936,7 +5914,7 @@ export class YouTubeMusicDataSource extends DataSource {
   async resolveStreamUrl(
     track: Track,
     quality: AudioQuality = getStreamingQuality(),
-  ): Promise<{ url: string; mimeType: string; cookie?: string }> {
+  ): Promise<{ url: string; mimeType: string; cookie?: string; contentLength?: number }> {
     const order: ClientLabel[] = (usesAuthenticatedStreaming() || Boolean(this.musicCookie))
       ? ["music", "download", "web"]
       : ["download", "music", "web"];
@@ -5954,7 +5932,7 @@ export class YouTubeMusicDataSource extends DataSource {
   async resolveDownloadUrl(
     track: Track,
     quality: AudioQuality = getDownloadQuality(),
-  ): Promise<{ url: string; mimeType: string; cookie?: string }> {
+  ): Promise<{ url: string; mimeType: string; cookie?: string; contentLength?: number }> {
     return this.resolveStream(track, quality, ["download", "music", "web"]);
   }
 
@@ -6431,7 +6409,10 @@ export class YouTubeMusicDataSource extends DataSource {
     if (usesRustAudioEngine()) {
       return this.getRustStreamData(track);
     }
+    return this.getNativeStreamData(track);
+  }
 
+  async getNativeStreamData(track: Track): Promise<StreamData> {
     if (track.source === "local") {
       if (!track.localPath) {
         throw new Error("Local track path is missing.");
@@ -6464,14 +6445,14 @@ export class YouTubeMusicDataSource extends DataSource {
           trackId: track.id,
           mimeType: track.mimeType ?? "audio/mp4",
         });
-        logInternalInfo("YouTubeMusicDataSource.getStreamData offline hit", {
+        logInternalInfo("YouTubeMusicDataSource.getNativeStreamData offline hit", {
           trackId: track.id,
           byteLength: payload.byteLength,
         });
         return { mimeType: payload.mimeType, sourceUrl: payload.url };
       } catch (error) {
         // The manifest and disk have drifted. Fall through to the network rather than fail.
-        logInternalWarn("YouTubeMusicDataSource.getStreamData offline miss", {
+        logInternalWarn("YouTubeMusicDataSource.getNativeStreamData offline miss", {
           trackId: track.id,
           error: error instanceof Error ? error.message : String(error),
         });
@@ -6480,7 +6461,7 @@ export class YouTubeMusicDataSource extends DataSource {
 
     const { url: streamUrl, mimeType: streamMimeType } = await this.resolveStreamUrl(track);
 
-    logInternalInfo("YouTubeMusicDataSource.getStreamData download start", {
+    logInternalInfo("YouTubeMusicDataSource.getNativeStreamData download start", {
       trackId: track.id,
     });
 
@@ -6496,7 +6477,7 @@ export class YouTubeMusicDataSource extends DataSource {
       throw new Error("Audio download returned no data.");
     }
 
-    logInternalInfo("YouTubeMusicDataSource.getStreamData download success", {
+    logInternalInfo("YouTubeMusicDataSource.getNativeStreamData download success", {
       trackId: track.id,
       byteLength: payload.byteLength,
       mimeType: payload.mimeType,
@@ -6519,7 +6500,7 @@ export class YouTubeMusicDataSource extends DataSource {
    * every case Rust already has, or can get, the bytes — asking the webview to carry them first
    * was only ever in service of an `<audio>` element that no longer exists on this path.
    */
-  private async getRustStreamData(track: Track): Promise<StreamData> {
+  async getRustStreamData(track: Track): Promise<StreamData> {
     if (track.source === "local") {
       if (!track.localPath) {
         throw new Error("Local track path is missing.");
@@ -6540,15 +6521,16 @@ export class YouTubeMusicDataSource extends DataSource {
       return { mimeType, rustSource: { kind: "offline", trackId: track.id, mimeType } };
     }
 
-    const { url, mimeType, cookie } = await this.resolveStreamUrl(track);
+    const { url, mimeType, cookie, contentLength } = await this.resolveStreamUrl(track);
     logInternalInfo("YouTubeMusicDataSource.getRustStreamData resolved", {
       trackId: track.id,
       mimeType,
       authenticated: Boolean(cookie),
+      contentLength,
     });
     return {
       mimeType,
-      rustSource: { kind: "stream", url, mimeType, cookie },
+      rustSource: { kind: "stream", url, mimeType, cookie, contentLength },
     };
   }
 

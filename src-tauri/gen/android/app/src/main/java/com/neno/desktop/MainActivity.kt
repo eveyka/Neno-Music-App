@@ -66,7 +66,10 @@ class MainActivity : TauriActivity() {
         override fun run() {
             targetWebView?.let { wv ->
                 wv.resumeTimers()
-                wv.evaluateJavascript("void 0;", null)
+                wv.evaluateJavascript(
+                    "if (typeof window.__neno_background_tick === 'function') { window.__neno_background_tick(); } else { void 0; }",
+                    null
+                )
             }
             backgroundKeepaliveHandler.postDelayed(this, 1000)
         }
@@ -213,6 +216,7 @@ class MainActivity : TauriActivity() {
                     allowContentAccess = true
                 }
                 webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                webView.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 webView.isVerticalScrollBarEnabled = false
                 webView.isHorizontalScrollBarEnabled = false
                 // Remove the edge-glow overscroll effect: it triggers a GPU compositing

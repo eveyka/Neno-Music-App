@@ -23,18 +23,13 @@ export interface NowPlaying {
  * 500-row playlist is not re-rendered several times a second just to move a progress bar.
  */
 export function useNowPlaying(): NowPlaying {
-  const state = usePlayerSelector(
+  return usePlayerSelector(
     (player) => ({
-      currentTrack: player.currentTrack,
-      status: player.status,
+      currentTrackId: player.currentTrack?.id ?? null,
+      isPlaying: player.status === "playing",
+      isLoading: player.status === "loading",
       playbackOrderMode: player.playbackOrderMode,
     }),
     shallowEqual,
   );
-  return {
-    currentTrackId: state.currentTrack?.id ?? null,
-    isPlaying: state.status === "playing",
-    isLoading: state.status === "loading",
-    playbackOrderMode: state.playbackOrderMode,
-  };
 }

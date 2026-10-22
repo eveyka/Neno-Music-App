@@ -2059,7 +2059,7 @@ export default function App() {
     */}
     <div
       className={cn(
-        "relative flex flex-col overflow-hidden",
+        "relative flex flex-col overflow-hidden bg-background text-foreground",
         isMobile
           ? "h-dvh rounded-none border-0 ring-0"
           : cn(
@@ -2150,7 +2150,7 @@ export default function App() {
             onDismiss={canNavigateBack ? handleNavigateBack : undefined}
           >
           <Suspense fallback={<div className="min-h-0 flex-1" />}>
-          <AnimatePresence mode="wait" initial={false}>
+          <AnimatePresence initial={false}>
           {playerUIState.isLyricsOpen && activeTab?.view !== "settings" ? (
             <motion.div
               key="lyrics-panel"
@@ -2158,7 +2158,7 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
             >
               <LyricsView onClose={() => playerUIStore.setLyricsOpen(false)} />
             </motion.div>
@@ -2166,15 +2166,10 @@ export default function App() {
           <motion.div
             key={activeViewKey}
             className="min-h-0 flex-1 transform-gpu"
-            initial={{ opacity: 0, y: 8, scale: 0.99 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.99 }}
-            transition={{
-              type: "spring",
-              stiffness: 340,
-              damping: 32,
-              mass: 0.6,
-            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.14, ease: "easeOut" }}
           >
             {activeTab?.view === "home" && (
               <HomePage

@@ -78,9 +78,7 @@ export function AppLoadingScreen({ isLeaving }: AppLoadingScreenProps) {
           </div>
 
           <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-widest text-muted-foreground/70">
-            <span>Neno</span>
-            <span>•</span>
-            <span className="text-red-500">YouTube Engine</span>
+            <span className="text-red-500">YouTube Music Engine</span>
           </div>
         </motion.div>
       </div>

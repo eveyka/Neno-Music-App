@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@/lib/utils";
 import { AlbumIcon, MusicNoteIcon, PlaylistIcon, UserIcon } from "@/ui/icons";
@@ -60,7 +60,7 @@ interface TrackArtworkProps {
   variant?: "track" | "album" | "artist" | "playlist";
 }
 
-export function TrackArtwork({
+export const TrackArtwork = memo(function TrackArtwork({
   artworkUrl,
   className,
   iconSize = 24,
@@ -327,4 +327,5 @@ export function TrackArtwork({
       )}
     </span>
   );
-}
+});
+

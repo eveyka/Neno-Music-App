@@ -56,6 +56,7 @@ export const primaryModifierLabel = isMacOS ? "⌘" : "Ctrl";
 export function applyPlatformAttributes() {
   document.documentElement.toggleAttribute("data-platform-linux", isLinux);
   document.documentElement.toggleAttribute("data-mobile", isMobileDevice);
+  document.documentElement.toggleAttribute("data-platform-desktop", !isMobileDevice);
 }
 
 

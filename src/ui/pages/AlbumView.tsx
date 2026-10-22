@@ -190,7 +190,7 @@ export function AlbumView({ album, playerController, libraryController }: AlbumV
   };
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <MediaHeader
         eyebrow="Album"
         title={album.title}

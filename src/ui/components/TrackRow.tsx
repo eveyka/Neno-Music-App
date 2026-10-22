@@ -15,10 +15,10 @@ import {
   getOfflineStatus,
   queueDownload,
   removeDownload,
-  useOfflineState,
+  useOfflineSelector,
 } from "../../player/offlineStore";
 import type { Track, TrackRating } from "../../datasource/types";
-import { libraryController, playerController, useLibraryState } from "../../player/playerStore";
+import { libraryController, playerController, useLibrarySelector } from "../../player/playerStore";
 import { useTrackContextMenu } from "./TrackContextMenu";
 import { ArtistLinks } from "./ArtistLinks";
 import { TrackArtwork } from "./TrackArtwork";
@@ -86,11 +86,11 @@ interface TrackRowProps extends PassthroughButtonProps {
  * state you need to see without hovering, the same reasoning as the queue's stop marker.
  */
 function DownloadAction({ track }: { track: Track }) {
-  // Subscribing here rather than in TrackRow keeps download churn from re-rendering the
-  // whole row, which matters on a 500-row playlist while a queue is draining.
-  const offline = useOfflineState();
-  const status = getOfflineStatus(track.id);
+  // Subscribing to specific track status rather than whole offline state keeps download churn
+  // from re-rendering the whole 500-row list while downloads stream.
+  const status = useOfflineSelector((_s) => getOfflineStatus(track.id));
   const isDownloading = status === "downloading";
+  const progress = useOfflineSelector((s) => (s.downloadingId === track.id ? s.progress : null));
 
   if (track.source === "local") return null;
 
@@ -137,7 +137,7 @@ function DownloadAction({ track }: { track: Track }) {
           <Loader
             variant="percent"
             size={18}
-            value={offline.progress ?? undefined}
+            value={progress ?? undefined}
             label={`Downloading ${track.title}`}
           />
         ) : status === "queued" ? (
@@ -212,13 +212,12 @@ function QuickAction({
  */
 function RatingActions({ track }: { track: Track }) {
   const { rateTrack } = useTrackContextMenu();
-  const libraryState = useLibraryState();
 
   // Local files have no YouTube rating to set, and a signed-out session has nowhere to put one.
   if (track.source === "local") return null;
 
-  const rating = libraryController.getTrackRating(track.id);
-  const isPending = libraryState.pendingLikeTrackIds.has(track.id);
+  const rating = useLibrarySelector(() => libraryController.getTrackRating(track.id));
+  const isPending = useLibrarySelector((s) => s.pendingLikeTrackIds.has(track.id));
 
   const button = (target: Exclude<TrackRating, "none">, icon: ReactNode, label: string) => {
     const isActive = rating === target;

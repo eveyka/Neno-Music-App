@@ -5,6 +5,7 @@ import type { Track } from "../datasource/types";
 import { logInternalError, logInternalInfo, logInternalWarn } from "../internal/logging";
 import { getAppSetting, setAppSetting } from "../internal/appSettings";
 import { getDownloadQuality, type AudioQuality } from "../internal/audioQuality";
+import { useStoreSelector } from "../internal/useStoreSelector";
 
 const MANIFEST_KEY = "neno.offline-manifest.v1";
 const LEGACY_MANIFEST_KEY = "zuno.offline-manifest.v1";
@@ -239,7 +240,7 @@ export function getOfflineTrack(trackId: string): Track | undefined {
 type StreamUrlResolver = (
   track: Track,
   quality: AudioQuality,
-) => Promise<{ url: string; mimeType: string; cookie?: string }>;
+) => Promise<{ url: string; mimeType: string; cookie?: string; contentLength?: number }>;
 
 let resolveStreamUrl: StreamUrlResolver | null = null;
 
@@ -401,4 +402,11 @@ export function getOfflineState(): OfflineState {
 
 export function useOfflineState(): OfflineState {
   return useSyncExternalStore(subscribe, getOfflineState, getOfflineState);
+}
+
+export function useOfflineSelector<T>(
+  select: (state: OfflineState) => T,
+  isEqual?: (a: T, b: T) => boolean,
+): T {
+  return useStoreSelector(subscribe, getOfflineState, select, isEqual);
 }

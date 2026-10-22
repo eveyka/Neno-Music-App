@@ -158,15 +158,15 @@ export function MediaHeader({
   }, [artworkUrl]);
 
   return (
-    <header className="relative flex flex-col gap-3.5 sm:gap-5 px-1 pb-4 sm:pb-6 pt-2">
+    <header className="relative flex flex-col gap-4 sm:gap-5 px-1 pb-3 sm:pb-6 pt-1">
       {/* Top Header Row: Artwork + Metadata Side-by-Side */}
       <div className="flex flex-row items-center sm:items-end gap-3.5 sm:gap-6 w-full min-w-0">
         <div className="shrink-0">
           {artworkSlot ?? (
             <TrackArtwork
               className={cn(
-                "size-24 sm:size-36 lg:size-44 shadow-2xl ring-1 ring-white/10 object-cover",
-                circularArtwork ? "rounded-full" : "rounded-xl sm:rounded-2xl",
+                "size-24 sm:size-36 lg:size-44 shadow-2xl ring-1 ring-white/15 object-cover",
+                circularArtwork ? "rounded-full" : "rounded-2xl",
               )}
               artworkUrl={artworkUrl}
               iconSize={48}
@@ -179,35 +179,156 @@ export function MediaHeader({
 
         <div className="flex min-w-0 flex-1 flex-col justify-center sm:justify-end gap-1 sm:gap-1.5">
           {eyebrow ? (
-            <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.16em] text-primary/90 font-mono">
               {eyebrow}
             </span>
           ) : null}
-          <h1 className="truncate text-xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-foreground leading-tight">
+          <h1 className="line-clamp-2 text-xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-tight">
             {title}
           </h1>
-          {subtitle ? <div className="truncate text-xs sm:text-sm text-foreground/80">{subtitle}</div> : null}
+          {subtitle ? <div className="truncate text-xs sm:text-sm text-foreground/80 font-medium">{subtitle}</div> : null}
           {meta ? <p className="truncate text-xs text-muted-foreground">{meta}</p> : null}
         </div>
       </div>
 
-      {/* Action Controls Row */}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full">
+      {/* Mobile Controls: Structured Two-Tier Layout (No Awkward Wrapping) */}
+      <div className="flex sm:hidden flex-col gap-2.5 w-full">
+        {/* Tier 1: Primary Play & Shuffle */}
+        {(playback || onShuffle) && (
+          <div className="flex items-center gap-2.5 w-full">
+            {playback ? (
+              <button
+                type="button"
+                disabled={actionsDisabled}
+                onClick={playback.onToggle}
+                aria-label={isPlaying ? "Pause" : "Play"}
+                className={cn(
+                  "h-12 flex items-center justify-center gap-2 rounded-full bg-primary text-primary-foreground font-semibold shadow-md shadow-primary/25 hover:brightness-110 active:scale-95 transition-all text-sm",
+                  onShuffle ? "flex-1" : "w-full",
+                )}
+              >
+                {isLoading ? (
+                  <SpinnerSteps size={20} color="currentColor" />
+                ) : isPlaying ? (
+                  <>
+                    <PauseActiveIcon size={20} aria-hidden="true" />
+                    <span>Pause</span>
+                  </>
+                ) : (
+                  <>
+                    <PlayActiveIcon size={20} aria-hidden="true" />
+                    <span>Play</span>
+                  </>
+                )}
+              </button>
+            ) : null}
+
+            {onShuffle ? (
+              <button
+                type="button"
+                disabled={actionsDisabled}
+                onClick={onShuffle}
+                className={cn(
+                  "h-12 flex items-center justify-center gap-2 rounded-full bg-card/90 border border-white/10 hover:bg-muted text-foreground font-semibold active:scale-95 transition-all text-sm shadow-sm",
+                  playback ? "flex-1" : "w-full",
+                )}
+              >
+                <ShuffleActiveIcon size={18} aria-hidden="true" />
+                <span>Shuffle</span>
+              </button>
+            ) : null}
+          </div>
+        )}
+
+        {/* Tier 2: Secondary Utility Strip */}
+        {(download || onAddToPlaylist || onAddToQueue || loop || actions) && (
+          <div className="flex items-center gap-2.5 w-full pt-0.5 overflow-x-auto no-scrollbar">
+            {download ? (() => {
+              const total = downloadCounts?.total ?? 0;
+              const downloaded = downloadCounts?.downloaded ?? 0;
+              const remaining = Math.max(0, total - downloaded);
+              const allDownloaded = total > 0 && remaining === 0 && !downloadCounts?.isPartial;
+
+              return (
+                <button
+                  type="button"
+                  disabled={actionsDisabled || allDownloaded || downloadBusy}
+                  onClick={download.onStart}
+                  aria-busy={downloadBusy}
+                  aria-label={allDownloaded ? "Already downloaded" : "Download for offline"}
+                  className="flex size-10 shrink-0 items-center justify-center rounded-full bg-card/80 border border-white/10 text-foreground transition-all hover:bg-muted active:scale-95 disabled:pointer-events-none disabled:opacity-50"
+                >
+                  {downloadBusy ? (
+                    <SpinnerSteps size={16} color="currentColor" />
+                  ) : allDownloaded ? (
+                    <CheckIcon size={16} aria-hidden="true" className="text-primary" />
+                  ) : (
+                    <DownloadIcon size={16} aria-hidden="true" />
+                  )}
+                </button>
+              );
+            })() : null}
+
+            {onAddToPlaylist ? (
+              <button
+                type="button"
+                disabled={actionsDisabled}
+                onClick={onAddToPlaylist}
+                aria-label="Add to playlist"
+                className="flex size-10 shrink-0 items-center justify-center rounded-full bg-card/80 border border-white/10 text-foreground transition-all hover:bg-muted active:scale-95 disabled:pointer-events-none disabled:opacity-50"
+              >
+                <PlaylistAddIcon size={17} aria-hidden="true" />
+              </button>
+            ) : null}
+
+            {onAddToQueue ? (
+              <button
+                type="button"
+                disabled={actionsDisabled}
+                onClick={onAddToQueue}
+                aria-label="Add to queue"
+                className="flex size-10 shrink-0 items-center justify-center rounded-full bg-card/80 border border-white/10 text-foreground transition-all hover:bg-muted active:scale-95 disabled:pointer-events-none disabled:opacity-50"
+              >
+                <ListIcon size={17} aria-hidden="true" />
+              </button>
+            ) : null}
+
+            {loop ? (
+              <button
+                type="button"
+                disabled={actionsDisabled}
+                onClick={isLooping && loop.onCycle ? loop.onCycle : loop.onPlay}
+                aria-pressed={isLooping}
+                aria-label={loopMode === "repeat-one" ? "Loop current song" : loopMode === "repeat-all" ? "Loop queue" : "Play in loop"}
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 disabled:pointer-events-none disabled:opacity-50",
+                  isLooping
+                    ? "bg-primary/20 text-primary border-primary/40 shadow-sm"
+                    : "bg-card/80 border-white/10 text-foreground hover:bg-muted",
+                )}
+              >
+                {loopMode === "repeat-one" ? (
+                  <RepeatOneActiveIcon size={17} aria-hidden="true" />
+                ) : (
+                  <RepeatActiveIcon size={17} aria-hidden="true" />
+                )}
+              </button>
+            ) : null}
+
+            {actions}
+          </div>
+        )}
+      </div>
+
+      {/* Desktop Controls Row */}
+      <div className="hidden sm:flex flex-wrap items-center gap-2.5 w-full">
         {playback ? (
-            /*
-             * Reflects this collection's own state, not the player's: it only becomes a
-             * Pause control while the track being played belongs here. Playing something
-             * else leaves this reading "Play", which is what the button would then do.
-             */
             <Tooltip content={isPlaying ? "Pause" : "Play"}>
               <button
                 type="button"
                 disabled={actionsDisabled}
                 onClick={playback.onToggle}
                 aria-label={isPlaying ? "Pause" : "Play"}
-                /* size-13 against the siblings' size-11: the primary action reads as primary
-                   through size and fill, so it does not need a word as well. Fixed width also
-                   drops the `min-w` that existed to stop Play/Pause/Loading jumping. */
                 className="flex size-13 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform hover:scale-[1.03] active:scale-95 disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 {isLoading ? (
@@ -289,15 +410,9 @@ export function MediaHeader({
           ) : null}
 
           {download ? (() => {
-            /*
-             * Disabled once everything here is already offline. Re-queueing downloaded tracks
-             * would be a no-op the user cannot see, so the button says so instead of appearing
-             * to do nothing.
-             */
             const total = downloadCounts?.total ?? 0;
             const downloaded = downloadCounts?.downloaded ?? 0;
             const remaining = Math.max(0, total - downloaded);
-            // Never "all downloaded" while pages remain unfetched — the unseen ones are not.
             const allDownloaded = total > 0 && remaining === 0 && !downloadCounts?.isPartial;
 
             return (

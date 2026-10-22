@@ -289,6 +289,6 @@ export interface LibrarySnapshot {
  * `datasource/` may import upward. Mirrors `NativeAudioSource` in `src-tauri/src/lib.rs`.
  */
 export type RustAudioSource =
-  | { kind: "stream"; url: string; mimeType: string; cookie?: string }
+  | { kind: "stream"; url: string; mimeType: string; cookie?: string; contentLength?: number }
   | { kind: "offline"; trackId: string; mimeType: string }
   | { kind: "file"; path: string };

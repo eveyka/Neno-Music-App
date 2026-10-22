@@ -206,7 +206,10 @@ class MediaPlaybackService : Service() {
                     act.runOnUiThread {
                         act.targetWebView?.let { wv ->
                             wv.resumeTimers()
-                            wv.evaluateJavascript("void 0;", null)
+                            wv.evaluateJavascript(
+                                "if (typeof window.__neno_background_tick === 'function') { window.__neno_background_tick(); } else { void 0; }",
+                                null
+                            )
                         }
                     }
                 }

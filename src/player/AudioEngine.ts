@@ -381,6 +381,23 @@ export class AudioEngine {
     logInternalInfo("AudioEngine.loadTrack cued", { videoId });
   }
 
+  /**
+   * Falls back to the `<audio>` element (HTMLAudio) when the Rust engine fails to load or decode.
+   * Releases Rust audio and IFrame players first to prevent resource contention.
+   */
+  async loadHtmlAudioFallback(
+    videoId: string,
+    sourceUrl?: string,
+    audioData?: ArrayBuffer,
+    mimeType?: string,
+  ): Promise<void> {
+    this.releaseRustAudio();
+    this.releaseIframePlayer();
+    this.iframeFallbackActive = false;
+    await this.loadNativeAudio(videoId, audioData, mimeType, sourceUrl);
+    logInternalWarn("AudioEngine fell back to native HTMLAudio player", { videoId });
+  }
+
   async loadNativeFallback(
     videoId: string,
     audioData?: ArrayBuffer,
@@ -391,8 +408,12 @@ export class AudioEngine {
   ): Promise<void> {
     this.player?.stopVideo();
     if (this.useRustAudio && rustSource) {
-      await this.loadRustAudio(videoId, rustSource, durationSec ?? 0);
-      return;
+      try {
+        await this.loadRustAudio(videoId, rustSource, durationSec ?? 0);
+        return;
+      } catch (err) {
+        logInternalWarn("AudioEngine.loadNativeFallback rust failed, trying HTMLAudio", { videoId, error: err });
+      }
     }
     await this.loadNativeAudio(videoId, audioData, mimeType, sourceUrl);
   }

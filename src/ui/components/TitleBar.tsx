@@ -212,7 +212,7 @@ export function TitleBar({
           src={appIcon}
           alt=""
         /> 
-        {!hideHomeText && <h3 >Neno</h3>}
+        {!hideHomeText && <span className="text-xs font-bold tracking-wide uppercase text-primary bg-primary/10 px-2 py-0.5 rounded-full">Music</span>}
       </button>
 
       <MusicTabs

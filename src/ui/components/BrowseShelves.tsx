@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { cn } from "@/lib/utils";
 import type { Album, Artist, BrowseLink, BrowseShelf, Playlist, Track } from "../../datasource/types";
 import type { PlayerControllerActions } from "../../player/playerStore";
@@ -8,7 +9,7 @@ import { usePlaylistContextMenu } from "./PlaylistContextMenu";
 import { useTrackContextMenu } from "./TrackContextMenu";
 
 /** Horizontal, scrollable, and clipped at the edge so there is a hint of more. */
-const SHELF_ROW = "flex gap-2.5 sm:gap-3 overflow-x-auto pb-1.5 snap-x no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+const SHELF_ROW = "flex gap-2.5 sm:gap-3 overflow-x-auto pb-1.5 snap-x no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden touch-pan-x [content-visibility:auto] [contain-intrinsic-size:auto_180px]";
 
 function chunkArray<T>(arr: readonly T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -18,7 +19,7 @@ function chunkArray<T>(arr: readonly T[], size: number): T[][] {
   return chunks;
 }
 
-function QuickPickItem({
+const QuickPickItem = memo(function QuickPickItem({
   track,
   onSelect,
   onContextMenu,
@@ -48,6 +49,7 @@ function QuickPickItem({
         "border border-white/5 bg-card/75 transition-colors duration-150",
         "hover:bg-card hover:border-white/15 hover:shadow-md active:scale-[0.98]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "[content-visibility:auto] [contain-intrinsic-size:auto_56px]",
       )}
     >
       <div className="relative size-12 sm:size-13 shrink-0 rounded-xl overflow-hidden bg-muted/40 shadow-xs">
@@ -88,14 +90,14 @@ function QuickPickItem({
       </button>
     </div>
   );
-}
+});
 
-function ArtistTile({ artist, onOpen }: { artist: Artist; onOpen: () => void }) {
+const ArtistTile = memo(function ArtistTile({ artist, onOpen }: { artist: Artist; onOpen: () => void }) {
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-28 sm:w-32 shrink-0 snap-start flex-col items-center gap-2 rounded-xl p-1.5 sm:p-2 text-center transition-all hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex w-28 sm:w-32 shrink-0 snap-start flex-col items-center gap-2 rounded-xl p-1.5 sm:p-2 text-center transition-all hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [content-visibility:auto] [contain-intrinsic-size:auto_140px]"
     >
       <TrackArtwork
         className="size-20 sm:size-24 rounded-full shadow-sm"
@@ -107,14 +109,14 @@ function ArtistTile({ artist, onOpen }: { artist: Artist; onOpen: () => void }) 
       <span className="line-clamp-2 text-xs font-semibold text-foreground">{artist.name}</span>
     </button>
   );
-}
+});
 
-function PlaylistTile({ playlist, onOpen }: { playlist: Playlist; onOpen: () => void }) {
+const PlaylistTile = memo(function PlaylistTile({ playlist, onOpen }: { playlist: Playlist; onOpen: () => void }) {
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-32 sm:w-36 shrink-0 snap-start flex-col gap-2 rounded-xl p-1.5 sm:p-2 text-left transition-all hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex w-32 sm:w-36 shrink-0 snap-start flex-col gap-2 rounded-xl p-1.5 sm:p-2 text-left transition-all hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [content-visibility:auto] [contain-intrinsic-size:auto_180px]"
     >
       <TrackArtwork
         className="size-28 sm:size-32 rounded-xl object-cover shadow-sm border border-white/10"
@@ -127,7 +129,7 @@ function PlaylistTile({ playlist, onOpen }: { playlist: Playlist; onOpen: () => 
       <span className="truncate text-[11px] text-muted-foreground">{playlist.owner}</span>
     </button>
   );
-}
+});
 
 /**
  * Renders browse shelves: song rows, then chips, then artwork rails.
@@ -137,7 +139,7 @@ function PlaylistTile({ playlist, onOpen }: { playlist: Playlist; onOpen: () => 
  * because songs read as a list and everything else reads as artwork, and interleaving the two
  * produced a column that changed rhythm every few rows.
  */
-export function BrowseShelves({
+export const BrowseShelves = memo(function BrowseShelves({
   shelves,
   playerController,
   onOpenAlbum,
@@ -288,4 +290,5 @@ export function BrowseShelves({
       })}
     </div>
   );
-}
+});
+

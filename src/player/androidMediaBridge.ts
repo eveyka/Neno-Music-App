@@ -15,12 +15,14 @@ import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { isAndroid } from "../ui/platform";
 import {
+  getPlayerState,
   playerController,
   shallowEqual,
+  subscribeToPlayer,
   usePlayerSelector,
 } from "./playerStore";
 import { getArtworkUrlCandidates } from "../datasource/youtube/artwork";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 // Action strings mirrored from MediaPlaybackService.kt companion object
 const ACTION_UPDATE = "com.neno.desktop.ACTION_UPDATE";
@@ -137,6 +139,41 @@ function syncServicePosition(positionSec: number): void {
 }
 
 /**
+ * Synchronously pushes current playerController state directly to the Android MediaPlaybackService.
+ * This runs on pure controller events (not tied to React render cycles), ensuring background
+ * auto-next and gapless track transitions instantly update Android system notification and
+ * media session even when the WebView UI is not actively rendering.
+ */
+export function syncAndroidMediaBridgeState(): void {
+  if (!isAndroidEnvironment()) return;
+
+  const state = getPlayerState();
+  const currentTrack = state.currentTrack;
+
+  if (!currentTrack) {
+    void stopService();
+    return;
+  }
+
+  const isPlaying = state.status === "playing";
+  const duration = Math.round(playerController.getDuration() || currentTrack.durationSec || 0);
+  const position = Math.round(playerController.getCurrentTime() || 0);
+  const hdArtworkUrl = currentTrack.artworkUrl
+    ? (getArtworkUrlCandidates(currentTrack.artworkUrl, 1200)[0] ?? currentTrack.artworkUrl)
+    : null;
+
+  void updateService(
+    currentTrack.title ?? "Unknown Track",
+    currentTrack.artist ?? "Unknown Artist",
+    isPlaying,
+    hdArtworkUrl,
+    duration,
+    position,
+    state.status, // "playing" | "paused" | "loading" | "idle"
+  );
+}
+
+/**
  * React hook: mounts once and keeps the Android MediaPlaybackService in sync
  * with the player state for the lifetime of the app.
  */
@@ -149,36 +186,14 @@ export function useAndroidMediaBridge(): void {
     shallowEqual,
   );
 
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  // Direct subscription to player store events - runs inside hook to avoid TDZ circular import crash
+  useEffect(() => {
+    return subscribeToPlayer(syncAndroidMediaBridgeState);
+  }, []);
 
   // Push player state changes to the Android service
   useEffect(() => {
-    if (!isAndroidEnvironment()) return;
-
-    const { currentTrack, status } = stateRef.current;
-
-    if (!currentTrack) {
-      void stopService();
-      return;
-    }
-
-    const isPlaying = status === "playing";
-    const duration = Math.round(playerController.getDuration() || currentTrack.durationSec || 0);
-    const position = Math.round(playerController.getCurrentTime() || 0);
-    const hdArtworkUrl = currentTrack.artworkUrl
-      ? (getArtworkUrlCandidates(currentTrack.artworkUrl, 1200)[0] ?? currentTrack.artworkUrl)
-      : null;
-
-    void updateService(
-      currentTrack.title ?? "Unknown Track",
-      currentTrack.artist ?? "Unknown Artist",
-      isPlaying,
-      hdArtworkUrl,
-      duration,
-      position,
-      status, // "playing" | "paused" | "loading" | "idle"
-    );
+    syncAndroidMediaBridgeState();
   }, [state.currentTrack, state.status]);
 
   // Periodic position sync during playback for notification seekbars
@@ -251,14 +266,32 @@ export function useAndroidMediaBridge(): void {
             console.warn("[androidMediaBridge] handleAudioOutputDeviceChanged failed:", err);
           });
           break;
+        case "backgroundTick":
+        case "tick":
+          try {
+            playerController.tickTransition?.();
+          } catch {
+            // Ignore
+          }
+          break;
         default:
           break;
       }
     };
 
-    // 1. Direct window callback
+    const handleBackgroundTick = () => {
+      try {
+        playerController.tickTransition?.();
+      } catch {
+        // Ignore
+      }
+    };
+
+    // 1. Direct window callbacks
     (window as unknown as { __neno_media_command?: (cmd: string) => void; __zuno_media_command?: (cmd: string) => void }).__neno_media_command = handleCommand;
     (window as unknown as { __zuno_media_command?: (cmd: string) => void }).__zuno_media_command = handleCommand;
+    (window as unknown as { __neno_background_tick?: () => void; __zuno_background_tick?: () => void }).__neno_background_tick = handleBackgroundTick;
+    (window as unknown as { __zuno_background_tick?: () => void }).__zuno_background_tick = handleBackgroundTick;
 
     // 2. CustomEvent on window
     const customEventListener = (event: Event) => {
@@ -283,6 +316,8 @@ export function useAndroidMediaBridge(): void {
     return () => {
       delete (window as unknown as { __neno_media_command?: unknown }).__neno_media_command;
       delete (window as unknown as { __zuno_media_command?: unknown }).__zuno_media_command;
+      delete (window as unknown as { __neno_background_tick?: unknown }).__neno_background_tick;
+      delete (window as unknown as { __zuno_background_tick?: unknown }).__zuno_background_tick;
       window.removeEventListener(BROADCAST_EVENT, customEventListener);
       void unlistenPromise?.then((fn) => fn());
     };

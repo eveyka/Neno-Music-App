@@ -1,6 +1,7 @@
-import { useCallback, useRef, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
+import { useStoreSelector } from "../internal/useStoreSelector";
 import { YouTubeMusicDataSource } from "../datasource/youtube/YouTubeMusicDataSource";
-import { LibraryController } from "./LibraryController";
+import { LibraryController, type LibraryState } from "./LibraryController";
 export type { QueueContext } from "./PlayerController";
 import { PlayerController, type PlayerSession, type PlayerState } from "./PlayerController";
 import { SearchController } from "./SearchController";
@@ -96,11 +97,13 @@ type PlayerControllerMethod =
   | "setStopAfterQueueIndex"
   | "generateQueueAfter"
   | "warmTrack"
-  | "handleAudioOutputDeviceChanged";
+  | "handleAudioOutputDeviceChanged"
+  | "tickTransition";
 
 export type PlayerControllerActions = Pick<PlayerController, PlayerControllerMethod>;
 
 class ActivePlayerController implements PlayerControllerActions {
+  tickTransition = () => tabManager.getActivePlayer().tickTransition();
   handleAudioOutputDeviceChanged = () =>
     tabManager.getActivePlayer().handleAudioOutputDeviceChanged();
   loadTrack = async (track: Parameters<PlayerController["loadTrack"]>[0]) =>
@@ -199,58 +202,16 @@ export const playerController: PlayerControllerActions = new ActivePlayerControl
  * fresh closure on every render, so every consumer re-subscribed on every render for the
  * life of the app.
  */
-const subscribeToPlayer = (listener: () => void) => tabManager.subscribe(listener);
-const subscribeToLibrary = (listener: () => void) => libraryController.subscribe(listener);
-const getPlayerState = () => tabManager.getActiveState();
-const getPlayerSession = () => tabManager.getActiveSession();
-const getLibraryState = () => libraryController.getState();
+export const subscribeToPlayer = (listener: () => void) => tabManager.subscribe(listener);
+export const subscribeToLibrary = (listener: () => void) => libraryController.subscribe(listener);
+export const getPlayerState = () => tabManager.getActiveState();
+export const getPlayerSession = () => tabManager.getActiveSession();
+export const getLibraryState = () => libraryController.getState();
 
 /** Re-exported so selector call sites need one import, not two. */
 export { shallowEqual } from "../internal/shallowEqual";
 
-/**
- * Subscribes to a slice of a store instead of the whole thing.
- *
- * The player state is one object, so subscribing to the whole thing re-renders on any change
- * to any field — dragging the volume slider used to re-render the entire application,
- * because the root subscribed to the same object as the volume control did.
- *
- * The cache is what makes an object-returning selector legal here: `useSyncExternalStore`
- * compares snapshots with `Object.is` and calls `getSnapshot` more than once per render, so
- * a selector building a fresh object every call would loop forever and warn. Holding the
- * previous value when the comparison says nothing changed is what keeps it stable.
- */
-function useStoreSelector<S, T>(
-  subscribe: (listener: () => void) => () => void,
-  getState: () => S,
-  select: (state: S) => T,
-  isEqual: (a: T, b: T) => boolean = Object.is,
-): T {
-  /* Both are read through refs because callers pass inline arrows: as dependencies they
-     would change identity every render and defeat the memoisation they exist to provide. */
-  const selectRef = useRef(select);
-  selectRef.current = select;
-  const isEqualRef = useRef(isEqual);
-  isEqualRef.current = isEqual;
-  const cacheRef = useRef<{ state: S; value: T } | null>(null);
-
-  const getSnapshot = useCallback(() => {
-    const state = getState();
-    const cached = cacheRef.current;
-    if (cached && Object.is(cached.state, state)) return cached.value;
-
-    const next = selectRef.current(state);
-    if (cached && isEqualRef.current(cached.value, next)) {
-      // Same selection, new state object: keep the old reference so React sees no change.
-      cacheRef.current = { state, value: cached.value };
-      return cached.value;
-    }
-    cacheRef.current = { state, value: next };
-    return next;
-  }, [getState]);
-
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-}
+export { useStoreSelector };
 
 /**
  * Prefer this over subscribing to the whole player state in anything that reads one or two
@@ -288,4 +249,11 @@ export function usePlayerSessionSelector<T>(
 
 export function useLibraryState() {
   return useSyncExternalStore(subscribeToLibrary, getLibraryState, getLibraryState);
+}
+
+export function useLibrarySelector<T>(
+  select: (state: LibraryState) => T,
+  isEqual?: (a: T, b: T) => boolean,
+): T {
+  return useStoreSelector(subscribeToLibrary, getLibraryState, select, isEqual);
 }

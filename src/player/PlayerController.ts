@@ -12,7 +12,6 @@ import { hasPreloadDeck } from "./preloadDeck";
 import { getAudioEngineMode, usesRustAudioEngine } from "../ui/settings/audioEngine";
 import { setOutputDevice } from "./rustAudio";
 import { DiscordRpcService } from "./DiscordRPC";
-import { isAndroidEnvironment } from "./androidMediaBridge";
 import {
   MAX_CROSSFADE_SEC,
   readPlaybackSettings,
@@ -688,6 +687,7 @@ export class PlayerController {
   addToQueue(track: Track): void {
     this.queue.add(track);
     this.emit();
+    this.warmNextTrack();
     logInternalInfo("PlayerController.addToQueue", {
       trackId: track.id,
       title: track.title,
@@ -697,6 +697,7 @@ export class PlayerController {
   playNext(track: Track): void {
     this.queue.playNext(track);
     this.emit();
+    this.warmNextTrack();
     logInternalInfo("PlayerController.playNext", {
       trackId: track.id,
       title: track.title,
@@ -1213,6 +1214,8 @@ export class PlayerController {
       forceRefresh,
     });
     this.emit();
+    // Warm the newly added next track immediately so standby deck is ready in background
+    this.warmNextTrack();
   }
 
   private async refreshRestoredTrackMetadata(track: Track, restoreRequestId: number): Promise<void> {
@@ -1375,7 +1378,7 @@ export class PlayerController {
        * never reached at all.
        */
       const isDownloaded = isTrackDownloaded(track.id);
-      const useNativeAudio = this.audioEngine.usesNativeAudio() || isDownloaded;
+      const useNativeAudio = this.audioEngine.usesNativeAudio() || this.audioEngine.usesRustAudio() || isDownloaded;
       /*
        * A warmed track skips the whole resolve-and-download round trip, which is the entire
        * wait a listener feels when they press next. Claimed rather than read: it is one slot,
@@ -1384,19 +1387,16 @@ export class PlayerController {
       const warmed = this.claimWarmedStream(track.id);
 
       /*
-       * A streamed track on the Rust engine gets the IFrame deck as a safety net on desktop.
-       * On Android or when native Rust audio is actively decoding, IFrame fallback is disabled
-       * because Android WebView blocks background iframe media autoplay.
+       * Multi-tiered systematic engine cascade:
+       * 1. Attempt the user's selected engine (default: Rust engine).
+       * 2. If Rust fails on mobile or desktop, gracefully cascade to Native HTMLAudio.
+       * 3. If Native HTMLAudio fails or is embed-only, cascade to YouTube IFrame player.
+       * 4. If YouTube IFrame player fails (e.g. error 101/150 embed restriction), cascade to Rust/Native.
+       * Playback is resilient across mobile (Android) and desktop, preventing dead playback states.
        */
-      const canFallBackToIframe = !isDownloaded && !this.audioEngine.usesRustAudio() && !isAndroidEnvironment();
-      /*
-       * The mirror case: the embed is refused not because Google won't resolve the track but
-       * because its owner disallows embedded playback at all (error 101/150) — a restriction
-       * on the embed, not on the video. A directly resolved stream is not an embed and
-       * sidesteps it, so a track that would otherwise be permanently unplayable on this engine
-       * gets one try at native audio before giving up.
-       */
-      const canFallBackToNative = !useNativeAudio && !isDownloaded;
+      const engineMode = getAudioEngineMode();
+      const isRustMode = engineMode === "rust";
+      const isNativeMode = engineMode === "native";
 
       try {
         let audioData = useNativeAudio
@@ -1446,30 +1446,140 @@ export class PlayerController {
           }
         }
       } catch (error) {
-        if (canFallBackToIframe) {
-          logInternalWarn("PlayerController.ensureTrackLoaded falling back to the YouTube player", {
-            trackId: track.id,
-            error: getErrorMessage(error),
-          });
-          await this.audioEngine.loadIframeFallback(track.id);
-        } else if (canFallBackToNative && isEmbedRestrictedPlaybackError(error)) {
-          const nativeAudioData = await this.dataSource.getStreamData?.(track);
-          if (!nativeAudioData) throw error;
-          logInternalWarn("PlayerController.ensureTrackLoaded falling back to native audio", {
-            trackId: track.id,
-            error: getErrorMessage(error),
-          });
-          await this.audioEngine.loadNativeFallback(
-            track.id,
-            nativeAudioData.bytes,
-            nativeAudioData.mimeType,
-            nativeAudioData.sourceUrl,
-            nativeAudioData.rustSource,
-            track.durationSec,
-          );
-        } else {
-          throw error;
+        logInternalWarn("PlayerController.ensureTrackLoaded primary engine failed", {
+          trackId: track.id,
+          engineMode,
+          error: getErrorMessage(error),
+        });
+
+        // 1. If Rust engine failed on an online track, cascade to Native HTMLAudio
+        if (isRustMode && !isDownloaded) {
+          try {
+            logInternalWarn("PlayerController.ensureTrackLoaded cascading to Native HTMLAudio fallback", {
+              trackId: track.id,
+            });
+            const nativeSource = this.dataSource.getNativeStreamData
+              ? await this.dataSource.getNativeStreamData(track)
+              : await this.dataSource.getStreamData?.(track);
+
+            if (nativeSource?.sourceUrl || nativeSource?.bytes) {
+              await this.audioEngine.loadHtmlAudioFallback(
+                track.id,
+                nativeSource.sourceUrl,
+                nativeSource.bytes,
+                nativeSource.mimeType,
+              );
+              this.loadedTrackId = track.id;
+              if (this.pendingSeekTime !== null) {
+                this.audioEngine.seekTo(this.pendingSeekTime);
+                this.pendingSeekTime = null;
+              }
+              logInternalInfo("PlayerController.ensureTrackLoaded HTMLAudio fallback success", {
+                trackId: track.id,
+                durationMs: Math.round(performance.now() - startedAt),
+              });
+              this.warmNextTrack();
+              return;
+            }
+          } catch (nativeErr) {
+            logInternalWarn("PlayerController.ensureTrackLoaded Native HTMLAudio fallback failed", {
+              trackId: track.id,
+              error: getErrorMessage(nativeErr),
+            });
+          }
         }
+
+        // 2. If Native HTMLAudio mode failed, cascade to Rust audio
+        if (isNativeMode && !isDownloaded && this.dataSource.getRustStreamData) {
+          try {
+            logInternalWarn("PlayerController.ensureTrackLoaded cascading to Rust audio fallback", {
+              trackId: track.id,
+            });
+            const rustData = await this.dataSource.getRustStreamData(track);
+            if (rustData?.rustSource) {
+              await this.audioEngine.loadTrack(
+                track.id,
+                undefined,
+                undefined,
+                undefined,
+                rustData.rustSource,
+                track.durationSec,
+              );
+              this.loadedTrackId = track.id;
+              if (this.pendingSeekTime !== null) {
+                this.audioEngine.seekTo(this.pendingSeekTime);
+                this.pendingSeekTime = null;
+              }
+              logInternalInfo("PlayerController.ensureTrackLoaded Rust audio fallback success", {
+                trackId: track.id,
+                durationMs: Math.round(performance.now() - startedAt),
+              });
+              this.warmNextTrack();
+              return;
+            }
+          } catch (rustErr) {
+            logInternalWarn("PlayerController.ensureTrackLoaded Rust audio fallback failed", {
+              trackId: track.id,
+              error: getErrorMessage(rustErr),
+            });
+          }
+        }
+
+        // 3. Fallback to YouTube IFrame player (safety net across desktop and mobile)
+        if (!isDownloaded) {
+          try {
+            logInternalWarn("PlayerController.ensureTrackLoaded cascading to YouTube player fallback", {
+              trackId: track.id,
+              error: getErrorMessage(error),
+            });
+            await this.audioEngine.loadIframeFallback(track.id);
+            this.loadedTrackId = track.id;
+            if (this.pendingSeekTime !== null) {
+              this.audioEngine.seekTo(this.pendingSeekTime);
+              this.pendingSeekTime = null;
+            }
+            logInternalInfo("PlayerController.ensureTrackLoaded YouTube player fallback success", {
+              trackId: track.id,
+              durationMs: Math.round(performance.now() - startedAt),
+            });
+            this.warmNextTrack();
+            return;
+          } catch (iframeErr) {
+            logInternalWarn("PlayerController.ensureTrackLoaded YouTube player fallback failed", {
+              trackId: track.id,
+              error: getErrorMessage(iframeErr),
+            });
+          }
+        }
+
+        // 4. If embed restriction occurred on IFrame mode, try Native or Rust stream
+        if (!useNativeAudio && !isDownloaded && isEmbedRestrictedPlaybackError(error)) {
+          const nativeAudioData = this.dataSource.getNativeStreamData
+            ? await this.dataSource.getNativeStreamData(track).catch(() => null)
+            : await this.dataSource.getStreamData?.(track).catch(() => null);
+          if (nativeAudioData) {
+            logInternalWarn("PlayerController.ensureTrackLoaded embed failure recovering with native stream", {
+              trackId: track.id,
+            });
+            await this.audioEngine.loadNativeFallback(
+              track.id,
+              nativeAudioData.bytes,
+              nativeAudioData.mimeType,
+              nativeAudioData.sourceUrl,
+              nativeAudioData.rustSource,
+              track.durationSec,
+            );
+            this.loadedTrackId = track.id;
+            if (this.pendingSeekTime !== null) {
+              this.audioEngine.seekTo(this.pendingSeekTime);
+              this.pendingSeekTime = null;
+            }
+            this.warmNextTrack();
+            return;
+          }
+        }
+
+        throw error;
       }
 
       this.loadedTrackId = track.id;
@@ -1491,7 +1601,7 @@ export class PlayerController {
         trackId: track.id,
       });
       const detail = getErrorMessage(error);
-      if (track.source === "local" || this.audioEngine.usesNativeAudio()) {
+      if (track.source === "local" || this.audioEngine.usesNativeAudio() || this.audioEngine.usesRustAudio()) {
         throw new Error(`Unable to load audio data for playback. ${detail}`);
       }
       throw new Error(`Unable to load YouTube player for playback. ${detail}`);
@@ -1545,7 +1655,18 @@ export class PlayerController {
    * Failures are swallowed on purpose. This is an optimisation; if it does not land,
    * `ensureTrackLoaded` fetches normally and the listener waits exactly as long as before.
    */
-  private warmNextTrack(preloadDeckNearEnd = false): void {
+  /**
+   * Warms whatever the next track will need: its metadata always, its audio on the native engine.
+   *
+   * The native engine has no standby deck, so without this every skip pays for a PO token, an
+   * InnerTube `player` call and a whole-file download before the first sample — seconds of
+   * silence after a button press. One slot is enough: it is only ever the track after the one
+   * playing, and the media server holds three.
+   *
+   * Failures are swallowed on purpose. This is an optimisation; if it does not land,
+   * `ensureTrackLoaded` fetches normally and the listener waits exactly as long as before.
+   */
+  private warmNextTrack(): void {
     const next = this.peekNextTrack();
     if (!next) return;
 
@@ -1563,7 +1684,7 @@ export class PlayerController {
       });
     }
 
-    if (!this.audioEngine.usesNativeAudio()) return;
+    if (!this.audioEngine.usesNativeAudio() && !this.audioEngine.usesRustAudio()) return;
     if (!this.dataSource.getStreamData) return;
     if (this.warmingStream) return;
 
@@ -1572,7 +1693,7 @@ export class PlayerController {
       return;
     }
     if (this.warmedStream?.trackId === next.id) {
-      if (!isLocalOrDownloaded && preloadDeckNearEnd && this.audioEngine.usesRustAudio() && !this.audioEngine.hasPreloaded(next.id)) {
+      if (this.audioEngine.usesRustAudio() && !this.audioEngine.hasPreloaded(next.id)) {
         if (this.warmedStream.data.rustSource) {
           void this.audioEngine.preloadRustTrack(next.id, this.warmedStream.data.rustSource, next.durationSec ?? 0);
         }
@@ -1586,16 +1707,8 @@ export class PlayerController {
       .then(async (data) => {
         this.warmedStream = { trackId: next.id, data };
         logInternalDebug("PlayerController.warmNextTrack audio ready", { trackId: next.id });
-        /*
-         * On the Rust engine, local and downloaded files can be decoded onto the standby deck
-         * anytime since files on disk never expire. For online streaming URLs, only decode onto
-         * the standby deck if we are within the transition lead window (`preloadDeckNearEnd`).
-         * This prevents streaming connections from idling for minutes and failing health checks.
-         */
         if (!data.rustSource || !this.audioEngine.usesRustAudio()) return;
-        if (isLocalOrDownloaded || preloadDeckNearEnd) {
-          await this.audioEngine.preloadRustTrack(next.id, data.rustSource, next.durationSec ?? 0);
-        }
+        await this.audioEngine.preloadRustTrack(next.id, data.rustSource, next.durationSec ?? 0);
       })
       .catch((error) => {
         logInternalWarn("PlayerController.warmNextTrack audio failed", {
@@ -1606,6 +1719,14 @@ export class PlayerController {
       .finally(() => {
         this.warmingStream = false;
       });
+  }
+
+  /**
+   * Explicit ticker callable from background keepalive on mobile (Android)
+   * to ensure gapless transitions and timers stay active when the screen is off.
+   */
+  tickTransition(): void {
+    this.onTransitionTick();
   }
 
   /**
@@ -1676,7 +1797,7 @@ export class PlayerController {
    * would count every track twice. Local files have no provider history to report to.
    */
   private beginPlayReport(track: Track): void {
-    if (!this.audioEngine.usesNativeAudio() || track.source === "local") return;
+    if ((!this.audioEngine.usesNativeAudio() && !this.audioEngine.usesRustAudio()) || track.source === "local") return;
     void this.dataSource.beginPlayReport?.(track);
   }
 
@@ -1690,7 +1811,7 @@ export class PlayerController {
   private syncScrobbleTicker(): void {
     const wanted = this.state.status === "playing"
       && this.isTabActive
-      && this.audioEngine.usesNativeAudio();
+      && (this.audioEngine.usesNativeAudio() || this.audioEngine.usesRustAudio());
 
     if (wanted === (this.scrobbleTimerId !== null)) return;
 
@@ -1759,7 +1880,7 @@ export class PlayerController {
     if (remaining <= PRELOAD_LEAD_SEC) {
       if (this.audioEngine.usesRustAudio()) {
         if (!this.audioEngine.hasPreloaded(next.id) && !this.warmingStream) {
-          this.warmNextTrack(true);
+          this.warmNextTrack();
         }
       } else {
         this.audioEngine.preloadNext(next.id);

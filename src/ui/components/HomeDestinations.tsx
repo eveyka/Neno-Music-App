@@ -89,18 +89,25 @@ export function HomeDestinations({
             key={card.key}
             type="button"
             onClick={card.onClick}
-            whileHover={{ y: -2 }}
+            whileHover={{ y: -3 }}
             whileTap={{ scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            transition={{ type: "spring", stiffness: 450, damping: 25 }}
             className={cn(
-              "group/dest flex items-center gap-3 overflow-hidden rounded-2xl bg-card p-3 text-left border border-border/50",
-              "transition-all hover:bg-card hover:border-border/80 shadow-xs",
+              "group/dest relative flex items-center gap-3 overflow-hidden rounded-2xl p-3 text-left",
+              "bg-card/40 backdrop-blur-xl border border-white/[0.08] shadow-[0_4px_20px_rgba(0,0,0,0.18)]",
+              "transition-all duration-300 hover:bg-card/70 hover:border-white/[0.22] hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)]",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}
           >
+            {/* Top glass specular highlight line */}
+            <span
+              className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"
+              aria-hidden="true"
+            />
+
             <span
               className={cn(
-                "grid size-10 shrink-0 place-items-center rounded-xl transition-colors duration-200",
+                "grid size-10 shrink-0 place-items-center rounded-xl transition-all duration-300 shadow-inner",
                 card.colorClass,
               )}
             >
@@ -108,13 +115,13 @@ export function HomeDestinations({
             </span>
 
             <span className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
-              <span className="truncate text-sm font-semibold leading-tight text-foreground">
+              <span className="truncate text-sm font-bold leading-tight text-foreground tracking-tight group-hover/dest:text-white transition-colors">
                 {card.label}
               </span>
               <span
                 className={cn(
-                  "truncate text-[11px] leading-tight",
-                  card.badge ? card.badgeColor : "text-muted-foreground",
+                  "truncate text-[11px] leading-tight transition-colors",
+                  card.badge ? card.badgeColor : "text-muted-foreground group-hover/dest:text-foreground/80",
                 )}
               >
                 {card.badge ?? card.hint}

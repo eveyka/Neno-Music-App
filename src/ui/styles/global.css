@@ -147,8 +147,8 @@ html,
 body,
 #root {
   height: 100%;
-  /* Transparent on desktop so the app root's rounded corners are cut out. */
-  background: transparent;
+  background-color: var(--color-background);
+  background: var(--color-background);
   color: var(--color-foreground);
   font-family: "Inter Variable", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
     Arial, "Apple Color Emoji", "Segoe UI Emoji";
@@ -162,10 +162,18 @@ body,
   text-rendering: optimizeLegibility;
 }
 
+/* Desktop only: transparent so app root's rounded corners show through */
+html[data-platform-desktop],
+html[data-platform-desktop] body,
+html[data-platform-desktop] #root {
+  background: transparent;
+}
+
 html[data-mobile],
 html[data-mobile] body,
 html[data-mobile] #root {
   background-color: var(--color-background);
+  background: var(--color-background);
 }
 
 /* Anywhere a number counts up or down, the glyphs must not change width. */
@@ -659,15 +667,29 @@ button, a, input, select, [role="button"], [role="tab"] {
 .smooth-scroll {
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .track-list-viewport {
   content-visibility: auto;
   contain: layout style paint;
+  -webkit-overflow-scrolling: touch;
 }
 
 .optimize-gpu {
   transform: translate3d(0, 0, 0);
   will-change: transform, opacity;
   backface-visibility: hidden;
+}
+
+/* Ensure images decode smoothly with zero layout thrashing */
+img {
+  content-visibility: auto;
+}
+
+/* Smooth momentum scrolling for mobile containers */
+[data-mobile] main,
+[data-mobile] .overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }

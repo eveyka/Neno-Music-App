@@ -190,10 +190,14 @@ export async function mintPoToken(contentBinding: string): Promise<string | unde
       return entry;
     })();
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("PO token attestation timed out")), 6000),
+      setTimeout(() => reject(new Error("PO token attestation timed out")), 8000),
     );
     const entry = await Promise.race([entryPromise, timeoutPromise]);
-    return await entry.minter.mintAsWebsafeString(contentBinding);
+    const mintPromise = entry.minter.mintAsWebsafeString(contentBinding);
+    const mintTimeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("PO token minting timed out")), 4000),
+    );
+    return await Promise.race([mintPromise, mintTimeoutPromise]);
   } catch (error) {
     if (lastWorkingMinter) {
       try {

@@ -62,7 +62,9 @@ export abstract class DataSource {
   getSearchSuggestions?(query: string, onUpdate?: (suggestions: string[]) => void): Promise<string[]>;
   /** Fetches recent search history from the provider (e.g. YouTube Music authenticated session). */
   getSearchHistory?(onUpdate?: (queries: string[]) => void): Promise<string[]>;
-  getStreamData?(track: Track): Promise<StreamData>;
+  getStreamData?(track: Track, forceContainer?: "mp4" | "webm"): Promise<StreamData>;
+  getNativeStreamData?(track: Track): Promise<StreamData>;
+  getRustStreamData?(track: Track): Promise<StreamData>;
   /**
    * Pre-pays whatever first-play latency can be paid before there is a play — e.g. warming a
    * lazily-created client or a slow one-time attestation. Fire-and-forget: called when the

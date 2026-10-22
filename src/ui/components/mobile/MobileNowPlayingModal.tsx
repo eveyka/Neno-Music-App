@@ -35,7 +35,7 @@ import {
   libraryController,
   playerController,
   shallowEqual,
-  useLibraryState,
+  useLibrarySelector,
   usePlayerSelector,
   usePlayerSessionSelector,
 } from "../../../player/playerStore";
@@ -347,7 +347,6 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
     }),
     shallowEqual,
   );
-  const libraryState = useLibraryState();
   const { toggleTrackLike, openPlaylistPicker, openTrackMenu } = useTrackContextMenu();
 
   // Queue state
@@ -370,13 +369,10 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
     ? (getArtworkUrlCandidates(currentTrack.artworkUrl)[0] ?? currentTrack.artworkUrl)
     : undefined;
 
-  // O(1) Set lookup instead of O(n) .some() scan — avoids re-running the whole array
-  // on every render, which matters because libraryState re-emits on any library change.
-  const isLiked = useMemo(() => {
-    if (!currentTrack) return false;
-    const likedIds = new Set(libraryState.library?.likedSongs.map((t) => t.id));
-    return likedIds.has(currentTrack.id);
-  }, [libraryState.library?.likedSongs, currentTrack?.id]);
+  // Fast O(1) selector instead of re-running Set allocations on every library state event
+  const isLiked = useLibrarySelector(
+    () => (currentTrack ? libraryController.isTrackLiked(currentTrack.id) : false),
+  );
 
   // downloadStatus is read per-render from the synchronous offline store.
   // Previously we had useOfflineState() at the top of the component which caused
@@ -1487,8 +1483,11 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
 
         {/* Feedback toast */}
         {toastMessage && (
-          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] rounded-full bg-[#202118] px-4 py-2 text-xs font-semibold text-white border border-white/20 shadow-2xl animate-fade-in">
-            {toastMessage}
+          <div className="fixed top-14 sm:top-8 left-1/2 -translate-x-1/2 z-[250] flex items-center gap-2.5 rounded-full bg-neutral-900/95 dark:bg-zinc-950/95 px-4 py-2 text-sm font-medium text-white shadow-[0_16px_40px_rgba(0,0,0,0.7)] border border-white/15 backdrop-blur-2xl pointer-events-none select-none whitespace-nowrap animate-in fade-in slide-in-from-top-4 duration-200">
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <CheckIcon size={14} aria-hidden="true" />
+            </div>
+            <span className="text-xs sm:text-sm font-semibold tracking-wide text-white">{toastMessage}</span>
           </div>
         )}
 
