@@ -109,26 +109,26 @@ export const SpeedDialSection = memo(function SpeedDialSection({
         <button
           type="button"
           onClick={onOpenSpeedDial}
-          className="group flex items-center gap-3 text-left transition-transform active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg p-0.5"
+          className="group flex items-center gap-2.5 text-left transition-transform active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
         >
           <AccountAvatar
             artworkUrl={account?.artworkUrl}
-            className="size-7 sm:size-8 rounded-full border border-white/10 shrink-0"
-            iconSize={16}
+            className="size-8 sm:size-9 rounded-full border border-white/10 shrink-0"
+            iconSize={18}
           />
           <div className="flex flex-col justify-center min-w-0">
             {account?.name && (
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider line-clamp-1 leading-none mb-1">
+              <span className="text-[11px] font-semibold text-white/60 uppercase tracking-wider line-clamp-1 leading-none mb-1">
                 {account.name}
               </span>
             )}
-            <div className="flex items-center gap-1 text-foreground group-hover:text-primary transition-colors">
+            <div className="flex items-center gap-1 text-white group-hover:text-primary transition-colors">
               <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-none">
                 Speed dial
               </h2>
               <ChevronRightIcon
-                size={22}
-                className="text-muted-foreground/80 group-hover:text-primary group-hover:translate-x-0.5 transition-all"
+                size={20}
+                className="text-white/60 group-hover:text-primary group-hover:translate-x-0.5 transition-all"
               />
             </div>
           </div>

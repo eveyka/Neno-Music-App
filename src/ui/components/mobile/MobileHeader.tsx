@@ -2,7 +2,6 @@ import { useState, memo } from "react";
 import { motion } from "motion/react";
 import { RefreshIcon, SearchIcon } from "@/ui/icons";
 import { cn } from "@/lib/utils";
-import appIcon from "../../../../assets/img/Logo.png";
 import { useLibraryState } from "../../../player/playerStore";
 import { AccountAvatar } from "../AccountSwitcher";
 import { GoogleSignInButton } from "../GoogleSignInButton";
@@ -45,25 +44,26 @@ function MobileHeaderInner({
   };
 
   return (
-    <header className="sticky top-0 z-20 w-full mb-2 flex h-13 items-center justify-between gap-2 bg-background/98 backdrop-blur-md px-2.5 py-1.5 transition-colors border-b border-white/10 overflow-hidden">
-      {/* Brand Identity */}
+    <header className="sticky top-0 z-20 w-full mb-2 flex h-13 items-center justify-between gap-2 bg-background/98 backdrop-blur-md px-3 py-1.5 transition-colors border-b border-white/[0.06] overflow-hidden">
+      {/* Brand Identity: Authentic YouTube Music style red circular logo + white bold Music typography */}
       <motion.div
         whileTap={{ scale: 0.95 }}
         transition={{ type: "spring", stiffness: 400, damping: 25 }}
         className="flex items-center gap-2 cursor-pointer select-none shrink-0"
       >
-        <div className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-card border border-white/10 shadow-xs">
-          <img src={appIcon} alt="Music" className="size-5.5 object-contain" />
+        <div className="relative flex size-7 shrink-0 items-center justify-center rounded-full bg-red-600 shadow-md">
+          <svg viewBox="0 0 24 24" className="size-4 fill-white" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" fill="none" stroke="white" strokeWidth="2.2" />
+            <polygon points="10,8 16,12 10,16" fill="white" />
+          </svg>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary tracking-wide uppercase">
-            Music
-          </span>
-        </div>
+        <span className="text-xl font-extrabold tracking-tight text-white drop-shadow-xs font-sans">
+          Music
+        </span>
       </motion.div>
 
-      {/* Right Actions: Refresh, Search & Account */}
-      <div className="flex items-center gap-1 shrink-0">
+      {/* Right Actions: Refresh, Search & Profile */}
+      <div className="flex items-center gap-1.5 shrink-0">
         {onRefresh && (
           <motion.button
             type="button"
@@ -71,12 +71,12 @@ function MobileHeaderInner({
             disabled={isRefreshing}
             whileTap={{ scale: 0.85 }}
             transition={{ type: "spring", stiffness: 500, damping: 20 }}
-            className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-card hover:text-foreground disabled:opacity-50"
+            className="flex size-9 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
             aria-label="Refresh recommendations"
             title="Refresh recommendations"
           >
             <RefreshIcon
-              size={17}
+              size={19}
               className={cn("transition-transform duration-500", isRefreshing && "animate-spin text-primary")}
             />
           </motion.button>
@@ -87,10 +87,10 @@ function MobileHeaderInner({
           onClick={onOpenSearch}
           whileTap={{ scale: 0.85 }}
           transition={{ type: "spring", stiffness: 500, damping: 20 }}
-          className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+          className="flex size-9 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-white"
           aria-label="Search"
         >
-          <SearchIcon size={18} />
+          <SearchIcon size={20} />
         </motion.button>
 
         {isSignedIn ? (
@@ -99,15 +99,14 @@ function MobileHeaderInner({
             onClick={onOpenSettings}
             whileTap={{ scale: 0.88 }}
             transition={{ type: "spring", stiffness: 500, damping: 20 }}
-            className="group relative flex size-7.5 shrink-0 items-center justify-center rounded-full ring-1.5 ring-primary/40 transition-transform hover:ring-primary"
+            className="group relative flex size-7.5 shrink-0 items-center justify-center rounded-full ring-1.5 ring-white/20 transition-transform hover:ring-primary"
             aria-label="Account profile"
           >
             <AccountAvatar
               artworkUrl={account?.artworkUrl}
-              className="size-6.5"
-              iconSize={14}
+              className="size-7"
+              iconSize={16}
             />
-            <span className="absolute bottom-0 right-0 size-2 rounded-full bg-emerald-500 ring-1.5 ring-background animate-pulse" />
           </motion.button>
         ) : isConnecting ? (
           <div className="relative flex h-7.5 items-center gap-1.5 rounded-full border border-red-500/30 bg-gradient-to-r from-red-500/15 to-red-500/5 px-2.5 shadow-xs shrink-0 select-none overflow-hidden">

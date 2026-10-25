@@ -30,6 +30,8 @@ const QuickPickItem = memo(function QuickPickItem({
   onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
   onWarm?: () => void;
 }) {
+  const subtitle = [track.artist, track.viewCountText].filter(Boolean).join(" • ") || track.artist || "Unknown Artist";
+
   return (
     <div
       role="button"
@@ -43,16 +45,13 @@ const QuickPickItem = memo(function QuickPickItem({
           onSelect();
         }
       }}
-      onContextMenu={onContextMenu}
       className={cn(
-        "group relative flex items-center gap-3 p-2 rounded-2xl select-none cursor-pointer text-left",
-        "border border-white/5 bg-card/75 transition-colors duration-150",
-        "hover:bg-card hover:border-white/15 hover:shadow-md active:scale-[0.98]",
+        "group relative flex items-center gap-3 p-1.5 sm:p-2 rounded-xl select-none cursor-pointer text-left",
+        "bg-transparent hover:bg-white/[0.08] active:bg-white/[0.12] transition-colors duration-150",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        "[content-visibility:auto] [contain-intrinsic-size:auto_56px]",
       )}
     >
-      <div className="relative size-12 sm:size-13 shrink-0 rounded-xl overflow-hidden bg-muted/40 shadow-xs">
+      <div className="relative size-12 sm:size-13 shrink-0 rounded-lg overflow-hidden bg-white/5 shadow-xs">
         <TrackArtwork
           artworkUrl={track.artworkUrl}
           size={56}
@@ -69,11 +68,11 @@ const QuickPickItem = memo(function QuickPickItem({
       </div>
 
       <div className="flex flex-1 min-w-0 flex-col justify-center gap-0.5">
-        <span className="truncate text-sm font-semibold tracking-tight text-foreground group-hover:text-primary transition-colors">
+        <span className="truncate text-sm font-semibold tracking-tight text-white group-hover:text-primary transition-colors">
           {track.title}
         </span>
-        <span className="truncate text-xs text-muted-foreground">
-          {track.artist || "Unknown Artist"}
+        <span className="truncate text-xs text-white/60">
+          {subtitle}
         </span>
       </div>
 
@@ -83,7 +82,7 @@ const QuickPickItem = memo(function QuickPickItem({
           e.stopPropagation();
           onContextMenu(e);
         }}
-        className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-white/10 hover:text-foreground active:scale-90 transition-all opacity-80 sm:opacity-0 sm:group-hover:opacity-100"
+        className="flex size-8 shrink-0 items-center justify-center rounded-full text-white/60 hover:bg-white/10 hover:text-white active:scale-90 transition-all opacity-90 sm:opacity-0 sm:group-hover:opacity-100"
         aria-label="More options"
       >
         <MenuDotsIcon size={16} />
@@ -181,11 +180,29 @@ export const BrowseShelves = memo(function BrowseShelves({
           shelf.artists.length > 0,
         ].filter(Boolean).length > 1;
 
+        const hasTracks = shelf.tracks.length > 0;
+        const playAllTracks = () => {
+          if (hasTracks) {
+            void playerController.playTrackById(shelf.tracks[0].id);
+          }
+        };
+
         return (
           <section key={`${shelfTitle}:${shelfIndex}`} className="flex flex-col gap-3.5">
-            <h2 className="text-xl font-bold tracking-tight text-foreground">{shelfTitle}</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">{shelfTitle}</h2>
+              {hasTracks && (
+                <button
+                  type="button"
+                  onClick={playAllTracks}
+                  className="rounded-full border border-white/20 bg-white/5 hover:bg-white/10 active:scale-95 px-3 py-1 text-xs font-semibold text-white transition-all shadow-xs"
+                >
+                  Play all
+                </button>
+              )}
+            </div>
 
-            {shelf.tracks.length > 0 && (
+            {hasTracks && (
               <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
                 {chunkArray(shelf.tracks, 4).map((chunk, colIndex) => (
                   <div

@@ -149,8 +149,8 @@ export function MobilePlayerBarInner({ onOpenNowPlaying, className }: MobilePlay
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         className={cn(
-          "relative flex w-full flex-col overflow-hidden rounded-2xl transform-gpu will-change-transform",
-          "bg-[#1c1d22] border border-white/15 shadow-[0_12px_36px_rgba(0,0,0,0.65)]",
+          "relative flex w-full flex-col overflow-hidden rounded-xl transform-gpu will-change-transform",
+          "bg-[#212124] border border-white/[0.08] shadow-[0_8px_24px_rgba(0,0,0,0.7)]",
           "cursor-pointer select-none",
           className,
         )}
@@ -159,87 +159,67 @@ export function MobilePlayerBarInner({ onOpenNowPlaying, className }: MobilePlay
         <MiniPlayerProgress trackId={currentTrack.id} isPlaying={isPlaying} />
 
         {/* Structured Content Row */}
-        <div className="flex items-center gap-3 px-3 py-2">
+        <div className="flex items-center gap-3 px-2.5 py-1.5">
           {/* Track Artwork Thumbnail */}
-          <div className="relative size-12 shrink-0 overflow-hidden rounded-xl shadow-md border border-white/10">
+          <div className="relative size-11 shrink-0 overflow-hidden rounded-lg shadow-sm bg-white/5">
             <TrackArtwork
               artworkUrl={currentTrack.artworkUrl}
               size={48}
               className="size-full object-cover"
             />
-            {isPlaying && (
-              <span className="absolute inset-0 bg-red-500/10 animate-pulse pointer-events-none" />
-            )}
           </div>
 
-          {/* Title & Artist - Cleanly Structured & Animated */}
+          {/* Title & Artist - Cleanly Structured */}
           <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={currentTrack.id}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.2 }}
-                className="flex flex-col truncate"
-              >
-                <span className="truncate text-sm font-semibold tracking-tight text-white leading-tight">
-                  {currentTrack.title || "Unknown Track"}
-                </span>
-                <span className="truncate text-xs font-normal text-white/65 leading-normal mt-0.5">
-                  {currentTrack.artist || "Unknown Artist"}
-                </span>
-              </motion.div>
-            </AnimatePresence>
+            <span className="truncate text-sm font-semibold tracking-tight text-white leading-tight">
+              {currentTrack.title || "Unknown Track"}
+            </span>
+            <span className="truncate text-xs font-normal text-white/60 leading-normal mt-0.5">
+              {currentTrack.artist || "Unknown Artist"}
+            </span>
           </div>
 
-          {/* Action Icons - Structured with uniform touch targets & spring feedback */}
+          {/* Action Icons */}
           <div className="flex items-center gap-1 shrink-0">
-            {/* Like button */}
-            <motion.button
+            {/* Cast / Like button */}
+            <button
               type="button"
               onClick={handleToggleLike}
-              whileTap={{ scale: 0.82 }}
-              transition={{ type: "spring", stiffness: 500, damping: 20 }}
-              className="flex size-10 items-center justify-center text-white/70 hover:text-white transition-colors"
+              className="flex size-9 items-center justify-center text-white/70 hover:text-white transition-colors"
               aria-label={isLiked ? "Unlike track" : "Like track"}
             >
               {isLiked ? (
-                <HeartActiveIcon size={20} className="text-red-500 scale-110 drop-shadow-[0_2px_8px_rgba(239,68,68,0.5)]" />
+                <HeartActiveIcon size={20} className="text-red-500 scale-105" />
               ) : (
                 <HeartIcon size={20} />
               )}
-            </motion.button>
+            </button>
 
-            {/* Play / Pause Circular Button */}
-            <motion.button
+            {/* Play / Pause Button */}
+            <button
               type="button"
               onClick={handlePlayPause}
-              whileTap={{ scale: 0.84 }}
-              transition={{ type: "spring", stiffness: 500, damping: 20 }}
-              className="flex size-10 items-center justify-center rounded-full bg-white text-black shadow-lg hover:opacity-90 transition-opacity"
+              className="flex size-10 items-center justify-center text-white hover:text-white/80 active:scale-90 transition-transform"
               aria-label={isPlaying ? "Pause" : "Play"}
             >
               {isLoading ? (
-                <SpinnerSteps size={18} className="text-black" />
+                <SpinnerSteps size={20} className="text-white" />
               ) : isPlaying ? (
-                <PauseActiveIcon size={18} />
+                <PauseActiveIcon size={24} className="fill-white text-white" />
               ) : (
-                <PlayActiveIcon size={18} className="translate-x-0.5" />
+                <PlayActiveIcon size={24} className="fill-white text-white translate-x-0.5" />
               )}
-            </motion.button>
+            </button>
 
-            {/* Skip Next Button */}
-            <motion.button
+            {/* Next Track Button */}
+            <button
               type="button"
               onClick={handleNext}
-              whileTap={{ scale: 0.82 }}
-              transition={{ type: "spring", stiffness: 500, damping: 20 }}
-              className="flex size-10 items-center justify-center text-white/75 hover:text-white transition-colors"
+              className="flex size-9 items-center justify-center text-white/80 hover:text-white active:scale-90 transition-transform"
               aria-label="Next track"
             >
-              <SkipNextIcon size={22} />
-            </motion.button>
+              <SkipNextIcon size={22} className="fill-white text-white" />
+            </button>
           </div>
         </div>
       </motion.div>

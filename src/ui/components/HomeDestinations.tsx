@@ -83,45 +83,39 @@ export function HomeDestinations({
 
   return (
     <section className="flex flex-col gap-3" aria-label="Quick Destinations">
-      <div className="grid grid-cols-2 gap-2.5 sm:[grid-template-columns:repeat(auto-fit,minmax(12rem,1fr))]">
+      <div className="grid grid-cols-2 gap-2 sm:gap-2.5 sm:[grid-template-columns:repeat(auto-fit,minmax(12rem,1fr))]">
         {cards.map((card) => (
           <motion.button
             key={card.key}
             type="button"
             onClick={card.onClick}
-            whileHover={{ y: -3 }}
+            whileHover={{ y: -2 }}
             whileTap={{ scale: 0.97 }}
             transition={{ type: "spring", stiffness: 450, damping: 25 }}
             className={cn(
-              "group/dest relative flex items-center gap-3 overflow-hidden rounded-2xl p-3 text-left",
-              "bg-card/40 backdrop-blur-xl border border-white/[0.08] shadow-[0_4px_20px_rgba(0,0,0,0.18)]",
-              "transition-all duration-300 hover:bg-card/70 hover:border-white/[0.22] hover:shadow-[0_8px_30px_rgba(0,0,0,0.3)]",
+              "group/dest relative flex items-center gap-3 overflow-hidden rounded-xl p-2.5 sm:p-3 text-left",
+              "bg-[#18181b]/70 border border-white/[0.08] shadow-sm",
+              "transition-all duration-200 hover:bg-[#202024] hover:border-white/[0.18]",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}
           >
-            {/* Top glass specular highlight line */}
-            <span
-              className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"
-              aria-hidden="true"
-            />
-
             <span
               className={cn(
-                "grid size-10 shrink-0 place-items-center rounded-xl transition-all duration-300 shadow-inner",
+                "grid size-9 shrink-0 place-items-center rounded-lg transition-all duration-300",
                 card.colorClass,
               )}
             >
-              <card.icon size={20} />
+              <card.icon size={18} />
             </span>
 
             <span className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
-              <span className="truncate text-sm font-bold leading-tight text-foreground tracking-tight group-hover/dest:text-white transition-colors">
+              <span className="truncate text-xs sm:text-sm font-bold leading-tight text-white tracking-tight">
                 {card.label}
               </span>
               <span
                 className={cn(
-                  "truncate text-[11px] leading-tight transition-colors",
-                  card.badge ? card.badgeColor : "text-muted-foreground group-hover/dest:text-foreground/80",
+                  "truncate text-[10px] sm:text-[11px] leading-tight transition-colors",
+                  card.badge ? card.badgeColor : "text-white/50",
                 )}
               >
                 {card.badge ?? card.hint}

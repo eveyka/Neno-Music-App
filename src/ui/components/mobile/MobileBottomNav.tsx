@@ -1,4 +1,3 @@
-import { motion } from "motion/react";
 import {
   HomeActiveIcon,
   HomeIcon,
@@ -72,55 +71,37 @@ export function MobileBottomNav({
     <nav
       aria-label="Mobile Navigation"
       className={cn(
-        "w-full flex items-center justify-around border-t border-white/10 bg-background/98 backdrop-blur-md px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom,0px),8px)] shadow-[0_-8px_24px_rgba(0,0,0,0.4)] select-none",
+        "w-full flex items-center justify-around border-t border-white/[0.08] bg-[#0f0f10]/98 backdrop-blur-md px-1 pt-2 pb-[max(env(safe-area-inset-bottom,0px),8px)] shadow-[0_-8px_24px_rgba(0,0,0,0.6)] select-none",
         className,
       )}
     >
       {navItems.map((item) => (
-        <motion.button
+        <button
           key={item.id}
           type="button"
           onClick={item.onClick}
-          whileTap={{ scale: 0.88 }}
-          transition={{ type: "spring", stiffness: 500, damping: 25 }}
           className={cn(
-            "relative flex flex-1 flex-col items-center justify-center gap-1 py-1.5 transition-colors rounded-xl",
-            item.isActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
+            "relative flex flex-1 flex-col items-center justify-center gap-1 py-1 transition-colors select-none",
+            item.isActive ? "text-white" : "text-white/50 hover:text-white/80 active:scale-95",
           )}
           aria-label={item.label}
         >
-          {/* Sliding glowing active background pill */}
-          {item.isActive && (
-            <motion.div
-              layoutId="mobileNavActivePill"
-              transition={{ type: "spring", stiffness: 450, damping: 32 }}
-              className="absolute inset-0 bg-primary/10 rounded-xl -z-10 shadow-[0_0_16px_rgba(255,0,51,0.15)]"
-            />
-          )}
-
-          <motion.div
-            animate={{
-              scale: item.isActive ? 1.08 : 1,
-              y: item.isActive ? -1 : 0,
-            }}
-            transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            className="relative"
-          >
+          <div className="relative">
             {item.isActive ? (
-              <item.ActiveIcon size={22} className="text-primary drop-shadow-[0_2px_8px_rgba(255,0,51,0.4)]" />
+              <item.ActiveIcon size={24} className="text-white fill-white" />
             ) : (
-              <item.InactiveIcon size={22} className="text-muted-foreground" />
+              <item.InactiveIcon size={24} className="text-white/60" />
             )}
-          </motion.div>
+          </div>
           <span
             className={cn(
-              "text-[10px] tracking-tight leading-tight transition-all",
-              item.isActive ? "font-bold text-primary" : "font-medium text-muted-foreground",
+              "text-[10px] tracking-tight leading-none transition-all",
+              item.isActive ? "font-semibold text-white" : "font-normal text-white/60",
             )}
           >
             {item.label}
           </span>
-        </motion.button>
+        </button>
       ))}
     </nav>
   );

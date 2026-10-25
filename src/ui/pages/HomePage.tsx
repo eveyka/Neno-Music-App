@@ -149,15 +149,16 @@ function shuffle<T>(items: readonly T[]): T[] {
 }
 
 const MOOD_FILTERS = [
-  { id: "all", label: "✨ For You", query: "trending music" },
-  { id: "relax", label: "☕ Relax & Chill", query: "lofi chill beats" },
-  { id: "energy", label: "⚡ Workout & Energy", query: "workout energetic music" },
-  { id: "focus", label: "🎯 Focus", query: "deep focus instrumental study music" },
-  { id: "party", label: "🎉 Party", query: "party dance songs" },
-  { id: "romance", label: "💖 Romance", query: "romantic love songs" },
-  { id: "bollywood", label: "🌟 Bollywood", query: "bollywood top hits" },
-  { id: "punjabi", label: "🔥 Punjabi", query: "punjabi latest songs" },
-  { id: "indie", label: "🌿 Indie & Acoustic", query: "indie pop acoustic songs" },
+  { id: "podcasts", label: "Podcasts", query: "popular podcasts episodes" },
+  { id: "feel-good", label: "Feel good", query: "feel good uplifting music" },
+  { id: "relax", label: "Relax", query: "relax chill acoustic lofi" },
+  { id: "romance", label: "Romance", query: "romantic love songs" },
+  { id: "energy", label: "Energy", query: "workout energetic high beat music" },
+  { id: "workout", label: "Workout", query: "gym workout power tracks" },
+  { id: "party", label: "Party", query: "party dance club hits" },
+  { id: "focus", label: "Focus", query: "deep focus instrumental study music" },
+  { id: "bollywood", label: "Bollywood", query: "bollywood top hits" },
+  { id: "punjabi", label: "Punjabi", query: "punjabi latest songs" },
 ];
 
 function uniqueTracks(tracks: readonly Track[]): Track[] {
@@ -208,7 +209,7 @@ export function HomePage({
   const { openTrackMenu } = useTrackContextMenu();
   const showMadeForYou = useMadeForYouVisible();
   const showYtmHomeFeed = useYtmHomeFeedVisible();
-  const [selectedMood, setSelectedMood] = useState<string>("all");
+  const [selectedMood, setSelectedMood] = useState<string>("");
   const recentlyPlayed = useMemo(
     () => libraryState.library?.recentlyPlayed ?? EMPTY_TRACKS,
     [libraryState.library],
@@ -353,10 +354,13 @@ export function HomePage({
     return shelves;
   }, [ytmHomeFeed]);
 
-  const quickPicksShelf = orderedShelves[0] ?? null;
+  const quickPicksShelf = useMemo(() => {
+    return orderedShelves.find((shelf) => isQuickPicksTitle(shelf.title) || shelf.tracks.length > 0) ?? null;
+  }, [orderedShelves]);
+
   const remainingShelves = useMemo(
-    () => (orderedShelves.length > 1 ? orderedShelves.slice(1) : []),
-    [orderedShelves],
+    () => orderedShelves.filter((s) => s !== quickPicksShelf),
+    [orderedShelves, quickPicksShelf],
   );
 
   useEffect(() => {
@@ -544,8 +548,9 @@ export function HomePage({
 
   const handleMoodSelect = useCallback(
     async (moodId: string) => {
-      setSelectedMood(moodId);
-      if (moodId === "all") {
+      const nextMood = selectedMood === moodId ? "" : moodId;
+      setSelectedMood(nextMood);
+      if (!nextMood) {
         if (persistentSuggestions && persistentSuggestions.length > 0) {
           setSuggestions(persistentSuggestions);
           return;
@@ -553,7 +558,7 @@ export function HomePage({
         void handleRefresh();
         return;
       }
-      const mood = MOOD_FILTERS.find((m) => m.id === moodId);
+      const mood = MOOD_FILTERS.find((m) => m.id === nextMood);
       if (!mood) return;
 
       setIsLoadingSuggestions(true);
@@ -568,7 +573,7 @@ export function HomePage({
         setIsLoadingSuggestions(false);
       }
     },
-    [handleRefresh, searchController],
+    [handleRefresh, searchController, selectedMood],
   );
 
   const compactRecent = useMemo(
@@ -710,20 +715,20 @@ export function HomePage({
         />
       )}
 
-      {/* ── Glass Greeting & Mood Chips Header ──────────────────────────── */}
-      <div className="flex flex-col gap-3.5 pt-0.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground drop-shadow-xs">
+      {/* ── Mood Chips Header (Matches YouTube Music) ───────────────────── */}
+      <div className="flex flex-col gap-3 pt-0.5">
+        {!isMobile && (
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white drop-shadow-xs">
               {greeting}
               {libraryState.library?.account?.name ? (
                 <span className="text-primary font-bold">, {libraryState.library.account.name.split(" ")[0]}</span>
               ) : null}
             </h1>
           </div>
-        </div>
+        )}
 
-        {/* Interactive Glass Mood / Vibe Filter Pills */}
+        {/* YouTube Music Style Filter Pills */}
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar snap-x [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {MOOD_FILTERS.map((mood) => {
             const isSelected = selectedMood === mood.id;
@@ -733,10 +738,10 @@ export function HomePage({
                 type="button"
                 onClick={() => void handleMoodSelect(mood.id)}
                 className={cn(
-                  "shrink-0 snap-start rounded-full px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 shadow-xs cursor-pointer select-none",
+                  "shrink-0 snap-start rounded-lg px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 cursor-pointer select-none border",
                   isSelected
-                    ? "bg-primary text-primary-foreground shadow-[0_0_16px_rgba(255,0,51,0.45)] ring-1 ring-white/30"
-                    : "bg-card/40 backdrop-blur-xl border border-white/[0.08] text-muted-foreground hover:bg-card/70 hover:border-white/[0.18] hover:text-foreground",
+                    ? "bg-white text-black border-white shadow-sm"
+                    : "bg-white/[0.08] hover:bg-white/[0.14] text-white/90 border-white/[0.08]",
                 )}
               >
                 {mood.label}
@@ -762,33 +767,13 @@ export function HomePage({
         </section>
       )}
 
-      {/* ── 1. Library & Browse Glass Destinations ─────────────────────── */}
-      <HomeDestinations {...destinations} />
-
-      {/* ── 2. Made for you ──────────────────────────────────────────────── */}
-      {showMadeForYou && madeForYouSection}
-
-      {/* ── 3. Speed dial (Only when signed in) ─────────────────────────── */}
-      {libraryState.status === "ready" && speedDialItems.length > 0 && (
-        <SpeedDialSection
-          items={speedDialItems}
-          account={libraryState.library?.account}
-          playerController={playerController}
-          onOpenSpeedDial={() => onOpenSpeedDial?.(speedDialItems)}
-          onOpenAlbum={onOpenAlbum}
-          onOpenPlaylist={onOpenPlaylist}
-          onOpenArtist={onOpenArtist}
-          isLoading={isLoadingHomeFeed && speedDialItems.length === 0}
-        />
-      )}
-
-      {/* ── 4. Quick Picks ───────────────────────────────────────────────── */}
+      {/* ── 1. Quick picks (YouTube Music Personalized Top Section) ────── */}
       {showYtmHomeFeed && libraryState.status === "ready" && (
         <div className="flex flex-col gap-8">
           {isLoadingHomeFeed && !ytmHomeFeed && (
             <section className="flex flex-col gap-3">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-xl font-bold tracking-tight text-foreground">Loading your feed…</h2>
+                <h2 className="text-xl font-bold tracking-tight text-white">Loading your feed…</h2>
                 <span className="text-xs text-muted-foreground animate-pulse">Updating…</span>
               </div>
               <AlbumGridSkeleton count={12} label="Loading your feed" />
@@ -806,7 +791,27 @@ export function HomePage({
         </div>
       )}
 
-      {/* ── 5. Remaining YouTube Music shelves (From the community, etc.) ─── */}
+      {/* ── 2. Speed dial (YouTube Music Listen Again / Speed Dial) ─────── */}
+      {libraryState.status === "ready" && speedDialItems.length > 0 && (
+        <SpeedDialSection
+          items={speedDialItems}
+          account={libraryState.library?.account}
+          playerController={playerController}
+          onOpenSpeedDial={() => onOpenSpeedDial?.(speedDialItems)}
+          onOpenAlbum={onOpenAlbum}
+          onOpenPlaylist={onOpenPlaylist}
+          onOpenArtist={onOpenArtist}
+          isLoading={isLoadingHomeFeed && speedDialItems.length === 0}
+        />
+      )}
+
+      {/* ── 3. Quick Destinations (Library, Browse, History, Downloads) ─── */}
+      <HomeDestinations {...destinations} />
+
+      {/* ── 4. Made for you ──────────────────────────────────────────────── */}
+      {showMadeForYou && madeForYouSection}
+
+      {/* ── 5. Remaining YouTube Music shelves (Albums, Community, Mixed) ─── */}
       {showYtmHomeFeed && libraryState.status === "ready" && remainingShelves.length > 0 && (
         <div className="flex flex-col gap-8">
           <BrowseShelves
