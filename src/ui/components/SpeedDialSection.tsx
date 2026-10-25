@@ -140,7 +140,7 @@ export const SpeedDialSection = memo(function SpeedDialSection({
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex w-full overflow-x-auto snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex w-full overflow-x-auto snap-x snap-mandatory no-scrollbar [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {isLoading ? (
             <div className="w-full shrink-0 snap-start grid grid-cols-3 grid-rows-3 gap-2 sm:gap-3">

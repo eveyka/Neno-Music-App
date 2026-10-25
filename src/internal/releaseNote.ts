@@ -23,11 +23,12 @@ import { getAppSetting, setAppSetting } from "./appSettings";
  */
 const SEEN_VERSION_KEY = "release-note-seen-version";
 
-export const RELEASE_NOTE_BODY = `**Accounts** — switch between multiple YouTube Music accounts instantly, no signing out required.
-**Sound** — pick your exact output device (real speaker/headphone names on Linux too), plus a bypass toggle and mini EQ right in the player bar.
-**Playlists** — shuffle now truly shuffles the whole playlist from wherever you are in it, loop cycles properly instead of getting stuck, and any playlist can be hidden from your library.
-**Discovery** — start a radio station from any track, and pages load in with proper skeletons instead of a blank flash.
-**Fixes** — some tracks auto-skipping a few seconds in, crossfade stalling when minimized, YouTube embed errors now falling back automatically, and a second launch refocusing Zuno instead of opening twice.
+export const RELEASE_NOTE_BODY = `**In-App Updates** — download and install updates directly inside the app with live download progress.
+**Performance** — smooth 60/120 FPS animations, GPU-accelerated transitions, and reduced APK size.
+**Accounts** — switch between multiple YouTube Music accounts instantly, no signing out required.
+**Sound** — pick your exact output device, plus a bypass toggle and mini EQ right in the player bar.
+**Playlists** — enhanced shuffle, seamless loop cycles, and library playlist management.
+**Fixes** — background playback audio keepalive, smoother crossfades, and a second launch refocusing Neno instead of opening twice.
 
 Enjoy your listening!`;
 

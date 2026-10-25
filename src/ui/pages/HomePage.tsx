@@ -624,7 +624,7 @@ export function HomePage({
       </div>
 
       {isMobile ? (
-        <div className="flex w-full gap-2.5 sm:gap-3 overflow-x-auto no-scrollbar snap-x py-1 px-0.5">
+        <div className="flex w-full gap-2.5 sm:gap-3 overflow-x-auto no-scrollbar snap-x py-1 px-0.5 [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
           {isLoadingSuggestions ? (
             Array.from({ length: 5 }, (_, index) => (
               <div key={index} className="w-32 sm:w-36 shrink-0 aspect-[3/4] snap-start">
@@ -724,7 +724,7 @@ export function HomePage({
         </div>
 
         {/* Interactive Glass Mood / Vibe Filter Pills */}
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar snap-x touch-pan-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar snap-x [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {MOOD_FILTERS.map((mood) => {
             const isSelected = selectedMood === mood.id;
             return (

@@ -332,11 +332,14 @@ export function CylinderCarousel({
 
   const drag = useRef({
     startX: 0,
+    startY: 0,
     startScroll: 0,
     lastX: 0,
     lastT: 0,
     prevX: 0,
     prevT: 0,
+    isTouch: false,
+    lockDirection: "" as "" | "horizontal" | "vertical",
   });
 
   const onPointerDown = useCallback(
@@ -344,18 +347,26 @@ export function CylinderCarousel({
       // Primary button only: a right-click would otherwise capture the pointer and leave the
       // carousel stuck mid-drag, because the press that opens a context menu never releases here.
       if (e.button !== 0) return;
-      e.preventDefault();
+      const isTouch = e.pointerType === "touch";
+      if (!isTouch) {
+        e.preventDefault();
+      }
       stopGlide();
-      draggingRef.current = true;
-      e.currentTarget.setPointerCapture(e.pointerId);
+      draggingRef.current = !isTouch;
+      if (!isTouch) {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }
       const now = performance.now();
       drag.current = {
         startX: e.clientX,
+        startY: e.clientY,
         startScroll: scroll.get(),
         lastX: e.clientX,
         lastT: now,
         prevX: e.clientX,
         prevT: now,
+        isTouch,
+        lockDirection: isTouch ? "" : "horizontal",
       };
     },
     [scroll, stopGlide],
@@ -363,8 +374,24 @@ export function CylinderCarousel({
 
   const onPointerMove = useCallback(
     (e: ReactPointerEvent) => {
-      if (!draggingRef.current) return;
       const d = drag.current;
+      if (d.isTouch && d.lockDirection === "") {
+        const dx = Math.abs(e.clientX - d.startX);
+        const dy = Math.abs(e.clientY - d.startY);
+        if (dx > 6 || dy > 6) {
+          if (dy >= dx) {
+            d.lockDirection = "vertical";
+            draggingRef.current = false;
+            return;
+          }
+          d.lockDirection = "horizontal";
+          draggingRef.current = true;
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {}
+        }
+      }
+      if (!draggingRef.current || d.lockDirection === "vertical") return;
       scroll.set(d.startScroll - ((e.clientX - d.startX) * dragSpeed) / gap);
       d.prevX = d.lastX;
       d.prevT = d.lastT;
@@ -507,7 +534,7 @@ export function CylinderCarousel({
         }}
         className={cn(
           // clip-path, not overflow: it also clips the GPU-composited balls
-          "relative w-full touch-none select-none outline-none overflow-x-clip [clip-path:inset(0)]",
+          "relative w-full [touch-action:pan-y] select-none outline-none overflow-x-clip [clip-path:inset(0)]",
           "cursor-grab active:cursor-grabbing",
           "focus-visible:ring-2 focus-visible:ring-foreground/20 overflow-y-visible",
           className,

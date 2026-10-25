@@ -1,9 +1,8 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { cn } from "@/lib/utils";
-import { parseReleaseNote, RELEASE_NOTE_BODY } from "../../internal/releaseNote";
+import { RELEASE_NOTE_BODY } from "../../internal/releaseNote";
 
 interface ReleaseNoteDialogProps {
   /** The version being announced, or null when there is nothing to announce. */
@@ -54,54 +53,75 @@ export function ReleaseNoteDialog({ version, onDismiss }: ReleaseNoteDialogProps
             role="dialog"
             aria-modal="true"
             aria-labelledby="release-note-title"
-            className="w-full max-w-lg rounded-2xl bg-popover p-6 text-popover-foreground shadow-2xl ring-1 ring-border"
-            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-popover text-popover-foreground shadow-2xl ring-1 ring-border/60"
+            initial={{ opacity: 0, scale: 0.95, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 4, transition: { duration: 0.12 } }}
+            exit={{ opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.12 } }}
             transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.7 }}
           >
-            <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-primary">
-              Updated
-            </span>
-            <h2 id="release-note-title" className="mt-1 text-xl font-bold tracking-tight">
-              Neno {version}
-            </h2>
+            {/* Header */}
+            <div className="relative border-b border-border/40 px-6 pt-6 pb-4">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wider text-primary uppercase">
+                  <span className="size-1.5 rounded-full bg-primary animate-pulse" />
+                  What's New
+                </span>
+              </div>
+              <h2 id="release-note-title" className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+                Neno <span className="text-primary font-semibold">v{version}</span>
+              </h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Here's what has been improved and added in this release.
+              </p>
+            </div>
 
-            {/* `whitespace-pre-line` so the note stays plain text: it is edited per release,
-                and making it markdown would mean a renderer and an escaping question. The
-                subreddit is linked where it is mentioned rather than as a button, so the
-                sentence reads as a sentence. */}
-            <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-              {parseReleaseNote(RELEASE_NOTE_BODY).map((segment, index) =>
-                segment.kind === "text" ? (
-                  segment.value
-                ) : segment.kind === "strong" ? (
-                  <strong
-                    key={`${index}:${segment.value}`}
-                    className="font-semibold text-foreground"
-                  >
-                    {segment.value}
-                  </strong>
-                ) : (
-                  <button
-                    key={`${index}:${segment.value}`}
-                    type="button"
-                    className="font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={() => void openUrl(segment.url)}
-                  >
-                    {segment.value}
-                  </button>
-                ),
-              )}
-            </p>
+            {/* Scrollable Structured Feature List */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2.5 [scrollbar-width:none]">
+              {RELEASE_NOTE_BODY.split("\n").filter((l) => l.trim().length > 0).map((line, idx) => {
+                const isFinalLine = !line.startsWith("**");
+                if (isFinalLine) {
+                  return (
+                    <div key={idx} className="pt-2 text-center text-xs font-medium text-muted-foreground/80">
+                      {line}
+                    </div>
+                  );
+                }
 
-            <div className="mt-5 flex items-center justify-end">
+                // Split title (**Title**) and description (— description)
+                const titleMatch = line.match(/^\*\*([^*]+)\*\*\s*—?\s*(.*)$/);
+                const title = titleMatch ? titleMatch[1] : "";
+                const desc = titleMatch ? titleMatch[2] : line;
+
+                return (
+                  <div
+                    key={idx}
+                    className="flex flex-col gap-1 rounded-2xl bg-muted/40 hover:bg-muted/60 transition-colors p-3.5 border border-border/30"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="size-2 rounded-full bg-primary/80" />
+                      <span className="text-sm font-semibold text-foreground tracking-tight">
+                        {title}
+                      </span>
+                    </div>
+                    <p className="pl-4 text-xs leading-relaxed text-muted-foreground">
+                      {desc}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between border-t border-border/40 px-6 py-4 bg-popover/80 backdrop-blur-md">
+              <span className="text-xs text-muted-foreground/70">
+                Tap anywhere outside or Got it to close
+              </span>
               <button
                 ref={dismissRef}
                 type="button"
                 className={cn(
-                  "rounded-full bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground",
-                  "transition-opacity hover:opacity-90",
+                  "rounded-full bg-primary px-6 py-2.5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20",
+                  "transition-all duration-150 hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98]",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 )}
                 onClick={onDismiss}

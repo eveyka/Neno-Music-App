@@ -9,7 +9,7 @@ import { usePlaylistContextMenu } from "./PlaylistContextMenu";
 import { useTrackContextMenu } from "./TrackContextMenu";
 
 /** Horizontal, scrollable, and clipped at the edge so there is a hint of more. */
-const SHELF_ROW = "flex gap-2.5 sm:gap-3 overflow-x-auto pb-1.5 snap-x no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden touch-pan-x [content-visibility:auto] [contain-intrinsic-size:auto_180px]";
+const SHELF_ROW = "flex gap-2.5 sm:gap-3 overflow-x-auto pb-1.5 snap-x no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]";
 
 function chunkArray<T>(arr: readonly T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -186,7 +186,7 @@ export const BrowseShelves = memo(function BrowseShelves({
             <h2 className="text-xl font-bold tracking-tight text-foreground">{shelfTitle}</h2>
 
             {shelf.tracks.length > 0 && (
-              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
                 {chunkArray(shelf.tracks, 4).map((chunk, colIndex) => (
                   <div
                     key={`col-${colIndex}`}
