@@ -17,6 +17,7 @@ export interface UpdateInfo {
   releaseUrl: string;
   canInstall: boolean;
   update?: Update;
+  apkDownloadUrl?: string;
 }
 
 export interface UpdateInstallProgress {
@@ -45,11 +46,31 @@ function isNewerVersion(installed: string, candidate: string): boolean {
   return false;
 }
 
+interface GithubAsset {
+  name: string;
+  browser_download_url: string;
+}
+
+interface GithubReleaseResponse {
+  tag_name?: string;
+  assets?: GithubAsset[];
+}
+
+function pickBestApkUrl(assets: GithubAsset[] = []): string | undefined {
+  // Prefer arm64-v8a or universal, then any .apk
+  const arm64 = assets.find((a) => /arm64|aarch64/i.test(a.name) && a.name.endsWith(".apk"));
+  if (arm64) return arm64.browser_download_url;
+  const universal = assets.find((a) => /universal/i.test(a.name) && a.name.endsWith(".apk"));
+  if (universal) return universal.browser_download_url;
+  const anyApk = assets.find((a) => a.name.endsWith(".apk"));
+  return anyApk?.browser_download_url;
+}
+
 async function checkViaGithubApi(): Promise<UpdateInfo | null> {
   try {
     const response = await fetch(RELEASES_API_URL);
     if (!response.ok) return null;
-    const data = await response.json() as { tag_name?: string };
+    const data = (await response.json()) as GithubReleaseResponse;
     const tagName = data.tag_name ?? "";
     const latestVersion = tagName.replace(RELEASE_TAG_PREFIX, "");
     const installedVersion = await getVersion();
@@ -58,11 +79,22 @@ async function checkViaGithubApi(): Promise<UpdateInfo | null> {
       return null;
     }
 
+    const isMobileAndroid =
+      typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+    const hasAndroidBridge =
+      typeof window !== "undefined" &&
+      typeof (window as unknown as { AndroidMediaBridge?: { downloadAndInstallApk?: unknown } })
+        ?.AndroidMediaBridge?.downloadAndInstallApk === "function";
+
+    const apkUrl = pickBestApkUrl(data.assets);
+    const canInstallOnAndroid = (isMobileAndroid || hasAndroidBridge) && Boolean(apkUrl);
+
     return {
       installedVersion,
       version: latestVersion,
       releaseUrl: `${RELEASES_URL}/${encodeURIComponent(tagName || latestVersion)}`,
-      canInstall: false,
+      canInstall: canInstallOnAndroid,
+      apkDownloadUrl: apkUrl,
     };
   } catch {
     return null;
@@ -102,6 +134,61 @@ export async function installUpdate(
   info: UpdateInfo,
   onProgress?: (progress: UpdateInstallProgress) => void,
 ): Promise<void> {
+  // If Android APK installation
+  if (info.apkDownloadUrl) {
+    const bridge = (
+      window as unknown as {
+        AndroidMediaBridge?: {
+          downloadAndInstallApk?: (url: string, version: string) => void;
+        };
+      }
+    ).AndroidMediaBridge;
+
+    if (bridge && typeof bridge.downloadAndInstallApk === "function") {
+      return new Promise<void>((resolve, reject) => {
+        const handler = (event: Event) => {
+          const customEvent = event as CustomEvent<{
+            status: "started" | "progress" | "finished" | "error";
+            percent?: number;
+            downloaded?: number;
+            total?: number;
+            error?: string;
+          }>;
+          const detail = customEvent.detail;
+          if (!detail) return;
+
+          if (detail.status === "progress" || detail.status === "started") {
+            onProgress?.({
+              downloadedBytes: detail.downloaded ?? 0,
+              totalBytes: detail.total,
+              percent: detail.percent,
+            });
+          } else if (detail.status === "finished") {
+            window.removeEventListener("neno-update-download-progress", handler);
+            onProgress?.({
+              downloadedBytes: detail.downloaded ?? detail.total ?? 0,
+              totalBytes: detail.total,
+              percent: 100,
+            });
+            resolve();
+          } else if (detail.status === "error") {
+            window.removeEventListener("neno-update-download-progress", handler);
+            reject(new Error(detail.error || "Failed to download and install APK"));
+          }
+        };
+
+        window.addEventListener("neno-update-download-progress", handler);
+        try {
+          bridge.downloadAndInstallApk!(info.apkDownloadUrl!, info.version);
+        } catch (e) {
+          window.removeEventListener("neno-update-download-progress", handler);
+          reject(e);
+        }
+      });
+    }
+  }
+
+  // Desktop (Tauri updater)
   if (!info.update) {
     throw new Error(
       "This update cannot be installed automatically. Please download it from the release page.",
@@ -124,9 +211,10 @@ export async function installUpdate(
     onProgress?.({
       downloadedBytes,
       totalBytes,
-      percent: totalBytes && totalBytes > 0
-        ? Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))
-        : undefined,
+      percent:
+        totalBytes && totalBytes > 0
+          ? Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))
+          : undefined,
     });
   };
 

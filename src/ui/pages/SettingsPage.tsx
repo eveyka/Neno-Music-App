@@ -1393,9 +1393,13 @@ export function SettingsPage({
                       ? updateProgress?.percent !== undefined
                         ? `Downloading version ${updateResult.version}: ${updateProgress.percent}%`
                         : `Preparing version ${updateResult.version}...`
-                      : isAndroid
-                        ? "A new APK release is available. Tap below to download the latest update."
-                        : "A new version of Neno is available to install."}
+                      : updateResult.canInstall
+                        ? isAndroid
+                          ? "A new version of Neno is available. You can download and install it directly in-app."
+                          : "A new version of Neno is available to install."
+                        : isAndroid
+                          ? "A new APK release is available. Tap below to download the latest update."
+                          : "A new version of Neno is available to download."}
                   </p>
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     {updateResult.canInstall && (
@@ -1405,11 +1409,17 @@ export function SettingsPage({
                         disabled={updateStatus === "installing"}
                         onClick={() => void handleInstallUpdate()}
                       >
-                        {updateStatus === "installing" ? "Installing..." : "Install now"}
+                        {updateStatus === "installing"
+                          ? updateProgress?.percent !== undefined
+                            ? `Downloading ${updateProgress.percent}%...`
+                            : "Installing..."
+                          : isAndroid
+                            ? "Download & Install"
+                            : "Install now"}
                       </button>
                     )}
                     <ExternalLinkButton
-                      label={isAndroid ? "Download APK" : updateResult.canInstall ? "View release" : "Download"}
+                      label={updateResult.canInstall ? "View release notes" : isAndroid ? "Download APK" : "Download"}
                       url={updateResult.releaseUrl}
                       className="px-3.5 py-1.5 text-xs"
                     />

@@ -253,7 +253,7 @@ export const TrackArtwork = memo(function TrackArtwork({
            */
           style={{ width: "100%", height: "100%" }}
           className={cn(
-            "absolute inset-0 object-cover transition-opacity duration-200",
+            "absolute inset-0 object-cover transition-opacity duration-200 transform-gpu",
             isArtworkLoaded ? "opacity-100" : "opacity-0",
           )}
           src={currentArtworkUrl}

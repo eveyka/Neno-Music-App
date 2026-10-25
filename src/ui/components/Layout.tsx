@@ -358,7 +358,7 @@ export function Layout({
                   <div className="relative mx-auto h-full w-1.5 rounded-full">
                     <div
                       className={cn(
-                        "w-full rounded-full transition-colors",
+                        "w-full rounded-full transition-colors transform-gpu",
                         isDraggingScrollbar
                           ? "bg-foreground/50"
                           : "bg-foreground/25 hover:bg-foreground/40",

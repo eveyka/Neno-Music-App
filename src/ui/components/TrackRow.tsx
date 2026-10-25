@@ -432,9 +432,9 @@ export const TrackRow = memo(function TrackRow({
       aria-current={isCurrent ? "true" : undefined}
       className={cn(
         "group/row relative flex w-full items-center gap-3 px-2 py-1.5 text-left rounded-xl",
-        "transition-all duration-150 hover:bg-card active:scale-[0.985] active:bg-primary/10 focus-visible:outline-none focus-visible:ring-2",
+        "transition-colors duration-150 hover:bg-card active:scale-[0.985] active:bg-primary/10 focus-visible:outline-none focus-visible:ring-2",
         "focus-visible:ring-inset focus-visible:ring-ring select-none",
-        "[content-visibility:auto] [contain-intrinsic-size:auto_52px]",
+        "[content-visibility:auto] [contain-intrinsic-size:auto_52px] transform-gpu",
         isCurrent && "bg-primary/5",
         isSelected && "bg-primary/10",
         className,

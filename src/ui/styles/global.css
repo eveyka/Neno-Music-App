@@ -223,9 +223,11 @@ time,
 /* Native-feeling desktop defaults */
 body {
   overflow: hidden;
+  -webkit-overflow-scrolling: touch;
 }
-button{
+button {
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 /* Hide browser scrollbars; we'll do custom later */

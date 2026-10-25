@@ -385,6 +385,11 @@ class MainActivity : TauriActivity() {
                 }
             }
         }
+
+        @JavascriptInterface
+        fun downloadAndInstallApk(downloadUrl: String, version: String) {
+            activity.startApkDownloadAndInstall(downloadUrl, version)
+        }
     }
 
     fun clearGoogleSession() {
@@ -608,6 +613,139 @@ class MainActivity : TauriActivity() {
                     loginWebView.loadUrl("https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F")
                 }
             }
+        }
+    }
+
+    fun startApkDownloadAndInstall(downloadUrl: String, version: String) {
+        Thread {
+            try {
+                runOnUiThread {
+                    targetWebView?.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('neno-update-download-progress', { detail: { status: 'started', percent: 0, downloaded: 0, total: 0 } }));",
+                        null
+                    )
+                }
+
+                val url = java.net.URL(downloadUrl)
+                val connection = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    instanceFollowRedirects = true
+                    connectTimeout = 15000
+                    readTimeout = 30000
+                    setRequestProperty("User-Agent", "NenoMusicApp")
+                }
+                connection.connect()
+
+                var responseCode = connection.responseCode
+                var currentConn = connection
+                // Handle manual redirects if any
+                var redirects = 0
+                while ((responseCode == java.net.HttpURLConnection.HTTP_MOVED_PERM ||
+                        responseCode == java.net.HttpURLConnection.HTTP_MOVED_TEMP ||
+                        responseCode == 307 || responseCode == 308) && redirects < 5) {
+                    val newUrl = currentConn.getHeaderField("Location")
+                    currentConn.disconnect()
+                    val nextUrl = java.net.URL(newUrl)
+                    currentConn = (nextUrl.openConnection() as java.net.HttpURLConnection).apply {
+                        instanceFollowRedirects = true
+                        connectTimeout = 15000
+                        readTimeout = 30000
+                        setRequestProperty("User-Agent", "NenoMusicApp")
+                    }
+                    currentConn.connect()
+                    responseCode = currentConn.responseCode
+                    redirects++
+                }
+
+                if (responseCode !in 200..299) {
+                    throw java.io.IOException("Server returned HTTP $responseCode")
+                }
+
+                val totalBytes = currentConn.contentLengthLong
+                val safeVersion = version.replace("[^a-zA-Z0-9.-]".toRegex(), "_")
+                val apkDir = java.io.File(cacheDir, "updates")
+                if (!apkDir.exists()) apkDir.mkdirs()
+                val apkFile = java.io.File(apkDir, "neno-$safeVersion.apk")
+                if (apkFile.exists()) apkFile.delete()
+
+                val inputStream = java.io.BufferedInputStream(currentConn.inputStream)
+                val outputStream = java.io.FileOutputStream(apkFile)
+                val buffer = ByteArray(8192)
+                var downloadedBytes = 0L
+                var bytesRead: Int
+                var lastReportTime = 0L
+
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    outputStream.write(buffer, 0, bytesRead)
+                    downloadedBytes += bytesRead
+
+                    val now = System.currentTimeMillis()
+                    if (now - lastReportTime > 200 || (totalBytes > 0 && downloadedBytes >= totalBytes)) {
+                        lastReportTime = now
+                        val percent = if (totalBytes > 0) ((downloadedBytes * 100) / totalBytes).toInt() else 0
+                        runOnUiThread {
+                            targetWebView?.evaluateJavascript(
+                                "window.dispatchEvent(new CustomEvent('neno-update-download-progress', { detail: { status: 'progress', percent: $percent, downloaded: $downloadedBytes, total: $totalBytes } }));",
+                                null
+                            )
+                        }
+                    }
+                }
+
+                outputStream.flush()
+                outputStream.close()
+                inputStream.close()
+                currentConn.disconnect()
+
+                runOnUiThread {
+                    targetWebView?.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('neno-update-download-progress', { detail: { status: 'finished', percent: 100, downloaded: $downloadedBytes, total: $totalBytes } }));",
+                        null
+                    )
+                    promptApkInstall(apkFile)
+                }
+            } catch (e: Throwable) {
+                e.printStackTrace()
+                val errMsg = org.json.JSONObject.quote(e.message ?: "Failed to download update")
+                runOnUiThread {
+                    targetWebView?.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('neno-update-download-progress', { detail: { status: 'error', error: $errMsg } }));",
+                        null
+                    )
+                }
+            }
+        }.start()
+    }
+
+    private fun promptApkInstall(apkFile: java.io.File) {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                if (!packageManager.canRequestPackageInstalls()) {
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = android.net.Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                }
+            }
+
+            val authority = "$packageName.fileprovider"
+            val apkUri = androidx.core.content.FileProvider.getUriForFile(this, authority, apkFile)
+
+            val installIntent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                flags = android.content.Intent.ACTION_VIEW.let {
+                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+            }
+            startActivity(installIntent)
+        } catch (e: Throwable) {
+            e.printStackTrace()
+            val errMsg = org.json.JSONObject.quote("Cannot launch installer: ${e.message}")
+            targetWebView?.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('neno-update-download-progress', { detail: { status: 'error', error: $errMsg } }));",
+                null
+            )
         }
     }
 }

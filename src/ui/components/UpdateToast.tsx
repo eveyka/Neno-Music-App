@@ -83,7 +83,11 @@ export function UpdateToast({ update, onDismiss }: UpdateToastProps) {
             disabled={installing}
             onClick={() => void install()}
           >
-            {installing ? "Installing..." : "Install"}
+            {installing
+              ? progress?.percent !== undefined
+                ? `${progress.percent}%`
+                : "Installing..."
+              : "Install"}
           </button>
         )}
         <a

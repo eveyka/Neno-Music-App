@@ -1082,6 +1082,7 @@ export function Sidebar({
   ) => cn(
     "group relative flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors",
     "hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    "[content-visibility:auto] [contain-intrinsic-size:auto_40px] transform-gpu",
     shouldHideText && "justify-center px-0",
     draggedItem?.id === id && draggedItem.type === type && "opacity-40",
     dropTarget?.id === id && dropTarget.type === type && !dropTarget.insertAfter &&
