@@ -6268,14 +6268,100 @@ export class YouTubeMusicDataSource extends DataSource {
       }
     }
 
-    const page: BrowsePage = { title: target.title, shelves };
+    const headerChips = this.collectHeaderChipsFromResponse(response);
+    const page: BrowsePage = { title: target.title, shelves, ...(headerChips.length > 0 ? { headerChips } : {}) };
     if (shelves.length > 0) await setCachedJson(cacheKey, page);
 
     logInternalInfo("YouTubeMusicDataSource.getBrowsePage", {
       surface,
       shelfCount: shelves.length,
+      headerChipsCount: headerChips.length,
     });
     return page;
+  }
+
+  /**
+   * Header chips (e.g. Podcasts, Relax, Feel good, Romance, Energize) from FEmusic_home.
+   */
+  private collectHeaderChipsFromResponse(root: unknown): BrowseLink[] {
+    const response = root as ParsedMusicResponse;
+    const chips: BrowseLink[] = [];
+    const seen = new Set<string>();
+
+    const extractFromChipList = (chipList: unknown[]) => {
+      for (const item of chipList) {
+        if (!item || typeof item !== "object") continue;
+        const candidate = item as {
+          text?: unknown;
+          title?: unknown;
+          endpoint?: unknown;
+          navigationEndpoint?: unknown;
+          on_tap?: unknown;
+        };
+        const textVal = candidate.text ?? candidate.title;
+        const title = (
+          typeof textVal === "string"
+            ? textVal
+            : (textVal as { toString?: () => string })?.toString?.() ?? ""
+        ).trim();
+
+        const endpoint =
+          candidate.endpoint ??
+          candidate.navigationEndpoint ??
+          candidate.on_tap;
+        const browseId = this.findBrowseId(endpoint) || "FEmusic_home";
+        const params = this.findBrowseParams(endpoint);
+
+        if (title && (browseId || params)) {
+          const key = `${title}:${params ?? ""}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            chips.push({ title, browseId, params });
+          }
+        }
+      }
+    };
+
+    // 1. Look for ChipCloud or ChipCloudChip in memo
+    for (const memo of [response.contents_memo, response.continuation_contents_memo]) {
+      if (!memo) continue;
+
+      try {
+        if (YTNodes.ChipCloudChip) {
+          const cloudChips = memo.getType(YTNodes.ChipCloudChip) as unknown[];
+          if (cloudChips && cloudChips.length > 0) {
+            extractFromChipList(cloudChips);
+          }
+        }
+      } catch {}
+
+      try {
+        if (YTNodes.ChipCloud) {
+          const chipClouds = memo.getType(YTNodes.ChipCloud) as unknown as Array<{ chips?: unknown[] }>;
+          for (const cc of chipClouds) {
+            if (Array.isArray(cc.chips)) {
+              extractFromChipList(cc.chips);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // 2. Look for header chip clouds directly on header, tabs, or SectionList
+    try {
+      const anyRoot = root as any;
+      const tabContent = anyRoot?.contents?.item?.()?.tabs?.find?.((t: any) => t.selected)?.content
+        ?? anyRoot?.contents?.tabs?.find?.((t: any) => t.selected)?.content;
+      const secHeader = tabContent?.header ?? anyRoot?.header;
+      if (secHeader?.chips && Array.isArray(secHeader.chips)) {
+        extractFromChipList(secHeader.chips);
+      }
+      if (secHeader?.contents && Array.isArray(secHeader.contents)) {
+        extractFromChipList(secHeader.contents);
+      }
+    } catch {}
+
+    return chips;
   }
 
   /**

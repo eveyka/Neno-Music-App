@@ -184,6 +184,8 @@ export interface BrowseShelf {
 export interface BrowsePage {
   title: string;
   shelves: BrowseShelf[];
+  /** Dynamic mood & genre filter chips returned by YouTube Music at the top of the feed */
+  headerChips?: BrowseLink[];
 }
 
 /** Either a named surface or an explicit feed reached by following a chip. */

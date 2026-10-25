@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CylinderCarousel } from "@/components/motion/cylinder-carousel";
 import { PlayActiveIcon, RefreshIcon } from "@/ui/icons";
 import { cn } from "@/lib/utils";
-import type { Album, Artist, BrowsePage, Playlist, SpeedDialItem, Track } from "../../datasource/types";
+import type { Album, Artist, BrowseLink, BrowsePage, Playlist, SpeedDialItem, Track } from "../../datasource/types";
 import type { LibraryController, LibraryState } from "../../player/LibraryController";
 import type { PlayerControllerActions } from "../../player/playerStore";
 import type { SearchController } from "../../player/SearchController";
@@ -547,33 +547,84 @@ export function HomePage({
   ]);
 
   const handleMoodSelect = useCallback(
-    async (moodId: string) => {
+    async (moodId: string, chip?: BrowseLink) => {
       const nextMood = selectedMood === moodId ? "" : moodId;
       setSelectedMood(nextMood);
+
       if (!nextMood) {
+        // Deselected: restore home feed
+        if (persistentHomeFeed) {
+          setYtmHomeFeed(persistentHomeFeed);
+        }
         if (persistentSuggestions && persistentSuggestions.length > 0) {
           setSuggestions(persistentSuggestions);
-          return;
         }
-        void handleRefresh();
         return;
       }
-      const mood = MOOD_FILTERS.find((m) => m.id === nextMood);
-      if (!mood) return;
 
+      setIsLoadingHomeFeed(true);
       setIsLoadingSuggestions(true);
+
+      const mood = MOOD_FILTERS.find((m) => m.id === nextMood);
+      const targetParams = chip?.params;
+      const targetBrowseId = chip?.browseId || "FEmusic_home";
+      const targetTitle = chip?.title || mood?.label || nextMood;
+
       try {
-        const results = await searchController.searchTracks(mood.query);
-        if (results && results.length > 0) {
-          setSuggestions(shuffle(results).slice(0, 36));
+        let feedPage: BrowsePage | null = null;
+        if (targetParams || targetBrowseId !== "FEmusic_home") {
+          feedPage = await libraryController.getBrowsePage({
+            browseId: targetBrowseId,
+            title: targetTitle,
+            params: targetParams,
+          });
+        }
+
+        if (feedPage && feedPage.shelves.length > 0) {
+          setYtmHomeFeed(feedPage);
+          const allTracks = feedPage.shelves.flatMap((s) => s.tracks);
+          if (allTracks.length > 0) {
+            setSuggestions(allTracks.slice(0, 36));
+          }
+        } else if (mood?.query) {
+          // If browse page returns empty or has no params, search YouTube Music for matching tracks
+          const results = await searchController.searchTracks(mood.query);
+          if (results && results.length > 0) {
+            setSuggestions(shuffle(results).slice(0, 36));
+            // Synthesize a Quick picks shelf for this mood
+            setYtmHomeFeed({
+              title: mood.label,
+              shelves: [
+                {
+                  title: "Quick picks",
+                  tracks: results.slice(0, 20),
+                  albums: [],
+                  playlists: [],
+                  artists: [],
+                  links: [],
+                },
+                ...(persistentHomeFeed?.shelves.filter((s) => !isQuickPicksTitle(s.title)) ?? []),
+              ],
+            });
+          }
         }
       } catch (err) {
         logInternalError("HomePage.handleMoodSelect failed", err);
+        // Fallback to search query
+        if (mood?.query) {
+          try {
+            const results = await searchController.searchTracks(mood.query);
+            if (results && results.length > 0) {
+              setSuggestions(shuffle(results).slice(0, 36));
+            }
+          } catch {}
+        }
       } finally {
+        setIsLoadingHomeFeed(false);
         setIsLoadingSuggestions(false);
       }
     },
-    [handleRefresh, searchController, selectedMood],
+    [libraryController, searchController, selectedMood],
   );
 
   const compactRecent = useMemo(
@@ -730,24 +781,50 @@ export function HomePage({
 
         {/* YouTube Music Style Filter Pills */}
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar snap-x [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {MOOD_FILTERS.map((mood) => {
-            const isSelected = selectedMood === mood.id;
-            return (
-              <button
-                key={mood.id}
-                type="button"
-                onClick={() => void handleMoodSelect(mood.id)}
-                className={cn(
-                  "shrink-0 snap-start rounded-lg px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 cursor-pointer select-none border",
-                  isSelected
-                    ? "bg-white text-black border-white shadow-sm"
-                    : "bg-white/[0.08] hover:bg-white/[0.14] text-white/90 border-white/[0.08]",
-                )}
-              >
-                {mood.label}
-              </button>
-            );
-          })}
+          {(() => {
+            // If YouTube Music provided dynamic chips in the home feed, use them!
+            const dynamicChips = persistentHomeFeed?.headerChips ?? ytmHomeFeed?.headerChips;
+            if (dynamicChips && dynamicChips.length > 0) {
+              return dynamicChips.map((chip) => {
+                const isSelected = selectedMood === chip.title;
+                return (
+                  <button
+                    key={`${chip.title}:${chip.params ?? ""}`}
+                    type="button"
+                    onClick={() => void handleMoodSelect(chip.title, chip)}
+                    className={cn(
+                      "shrink-0 snap-start rounded-lg px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 cursor-pointer select-none border",
+                      isSelected
+                        ? "bg-white text-black border-white shadow-sm font-bold"
+                        : "bg-white/[0.08] hover:bg-white/[0.14] text-white/90 border-white/[0.08]",
+                    )}
+                  >
+                    {chip.title}
+                  </button>
+                );
+              });
+            }
+
+            // Fallback: standard YouTube Music chips
+            return MOOD_FILTERS.map((mood) => {
+              const isSelected = selectedMood === mood.id;
+              return (
+                <button
+                  key={mood.id}
+                  type="button"
+                  onClick={() => void handleMoodSelect(mood.id)}
+                  className={cn(
+                    "shrink-0 snap-start rounded-lg px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 cursor-pointer select-none border",
+                    isSelected
+                      ? "bg-white text-black border-white shadow-sm font-bold"
+                      : "bg-white/[0.08] hover:bg-white/[0.14] text-white/90 border-white/[0.08]",
+                  )}
+                >
+                  {mood.label}
+                </button>
+              );
+            });
+          })()}
         </div>
       </div>
 
