@@ -2,7 +2,7 @@ import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { AccountProfile, Album, Artist, Playlist, SpeedDialItem, Track } from "../../datasource/types";
 import type { PlayerControllerActions } from "../../player/playerStore";
-import { ChevronRightIcon, PlayActiveIcon } from "../icons";
+import { ChevronRightIcon } from "../icons";
 import { AccountAvatar } from "./AccountSwitcher";
 import { TrackArtwork } from "./TrackArtwork";
 import { useTrackContextMenu } from "./TrackContextMenu";
@@ -196,19 +196,12 @@ export const SpeedDialSection = memo(function SpeedDialSection({
                         if (isTrack) openTrackMenu(e, entry.item);
                       }}
                       className={cn(
-                        "group relative aspect-square w-full overflow-hidden cursor-pointer select-none",
-                        isArtist ? "rounded-2xl sm:rounded-3xl" : "rounded-2xl",
-                        "border border-white/[0.1] bg-card/40 backdrop-blur-md transition-all duration-300",
-                        "hover:border-white/[0.28] hover:shadow-[0_8px_30px_rgba(0,0,0,0.4)] active:scale-[0.97]",
+                        "group relative aspect-square w-full overflow-hidden cursor-pointer select-none rounded-xl",
+                        "bg-[#18181b] border border-white/[0.08] transition-all duration-200",
+                        "hover:border-white/[0.2] active:scale-[0.98]",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       )}
                     >
-                      {/* Top Specular glass highlight line */}
-                      <span
-                        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent z-10"
-                        aria-hidden="true"
-                      />
-
                       {/* Artwork */}
                       <div className="size-full overflow-hidden">
                         <TrackArtwork
@@ -216,39 +209,28 @@ export const SpeedDialSection = memo(function SpeedDialSection({
                           size={240}
                           iconSize={32}
                           variant={isArtist ? "artist" : "album"}
-                          className={cn(
-                            "size-full object-cover transition-transform duration-300 group-hover:scale-105",
-                            isArtist && "scale-[0.92] rounded-full",
-                          )}
+                          className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
                         />
                       </div>
 
-                      {/* Gradient Overlay for Readability */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent pointer-events-none" />
+                      {/* Smooth dark gradient bottom overlay like YouTube Music */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent pointer-events-none" />
 
-                      {/* Top Badge for Album/Playlist/Artist */}
-                      {badgeLabel && (
-                        <div className="absolute top-2 left-2 pointer-events-none z-10">
-                          <span className="px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md text-[9px] sm:text-[10px] font-bold text-white/90 uppercase tracking-wider border border-white/15 shadow-xs">
+                      {/* Title & subtitle badge like YouTube Music */}
+                      <div className="absolute bottom-2 left-2 right-2 pointer-events-none z-10 flex flex-col justify-end">
+                        {badgeLabel && (
+                          <span className="text-[10px] font-semibold text-white/70 tracking-tight leading-tight">
                             {badgeLabel}
                           </span>
+                        )}
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="line-clamp-1 text-xs font-bold text-white tracking-tight leading-snug">
+                            {title}
+                          </span>
+                          {(isAlbum || isPlaylist) && (
+                            <ChevronRightIcon size={14} className="text-white/60 shrink-0" />
+                          )}
                         </div>
-                      )}
-
-                      {/* Desktop Play Overlay Icon for Track */}
-                      {isTrack && (
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
-                          <div className="size-11 rounded-full bg-primary/95 text-primary-foreground flex items-center justify-center shadow-[0_4px_20px_rgba(255,0,51,0.5)] transform scale-85 group-hover:scale-100 transition-transform">
-                            <PlayActiveIcon size={20} className="translate-x-0.5" />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Title Text */}
-                      <div className="absolute bottom-2 left-2.5 right-2.5 sm:bottom-3 sm:left-3 sm:right-3 pointer-events-none z-10">
-                        <span className="line-clamp-2 text-xs sm:text-sm font-bold text-white leading-tight drop-shadow-md tracking-tight">
-                          {title}
-                        </span>
                       </div>
                     </div>
                   );

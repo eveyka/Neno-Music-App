@@ -203,11 +203,11 @@ export const BrowseShelves = memo(function BrowseShelves({
             </div>
 
             {hasTracks && (
-              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
+              <div className="flex gap-2.5 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
                 {chunkArray(shelf.tracks, 4).map((chunk, colIndex) => (
                   <div
                     key={`col-${colIndex}`}
-                    className="w-[85vw] max-w-[340px] sm:max-w-[370px] md:max-w-[400px] shrink-0 snap-start flex flex-col gap-1.5"
+                    className="w-[88vw] max-w-[360px] shrink-0 snap-start flex flex-col gap-1.5"
                   >
                     {chunk.map((track) => (
                       <QuickPickItem
