@@ -2,6 +2,7 @@ import { useState, memo } from "react";
 import { motion } from "motion/react";
 import { RefreshIcon, SearchIcon } from "@/ui/icons";
 import { cn } from "@/lib/utils";
+import appIcon from "../../../../assets/img/Logo.png";
 import { useLibraryState } from "../../../player/playerStore";
 import { AccountAvatar } from "../AccountSwitcher";
 import { GoogleSignInButton } from "../GoogleSignInButton";
@@ -44,22 +45,24 @@ function MobileHeaderInner({
   };
 
   return (
-    <header className="sticky top-0 z-20 w-full mb-2 flex h-13 items-center justify-between gap-2 bg-background/98 backdrop-blur-md px-3 py-1.5 transition-colors border-b border-white/[0.06] overflow-hidden">
-      {/* Brand Identity: Authentic YouTube Music style red circular logo + white bold Music typography */}
+    <header className="sticky top-0 z-20 w-full mb-2 flex h-13 items-center justify-between gap-2 bg-background/98 backdrop-blur-md px-2.5 py-1.5 transition-colors border-b border-white/10 overflow-hidden">
+      {/* Brand Identity */}
       <motion.div
         whileTap={{ scale: 0.95 }}
         transition={{ type: "spring", stiffness: 400, damping: 25 }}
         className="flex items-center gap-2 cursor-pointer select-none shrink-0"
       >
-        <div className="relative flex size-7 shrink-0 items-center justify-center rounded-full bg-red-600 shadow-md">
-          <svg viewBox="0 0 24 24" className="size-4 fill-white" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" fill="none" stroke="white" strokeWidth="2.2" />
-            <polygon points="10,8 16,12 10,16" fill="white" />
-          </svg>
+        <div className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-card border border-white/10 shadow-xs">
+          <img src={appIcon} alt="Neno" className="size-5.5 object-contain" />
         </div>
-        <span className="text-xl font-extrabold tracking-tight text-white drop-shadow-xs font-sans">
-          Music
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[15px] font-extrabold tracking-tight text-foreground leading-none">
+            Neno
+          </span>
+          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary tracking-wide uppercase">
+            Music
+          </span>
+        </div>
       </motion.div>
 
       {/* Right Actions: Refresh, Search & Profile */}
