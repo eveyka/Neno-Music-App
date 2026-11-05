@@ -563,7 +563,7 @@ export class PlayerController {
         throw new Error("No track available to play.");
       }
 
-      const isResumingLoadedTrack = this.loadedTrackId === track.id;
+      const isResumingLoadedTrack = this.loadedTrackId === track.id && this.audioEngine.isDeckLoaded(track.id);
       if (!isResumingLoadedTrack || this.state.status === "error") {
         this.setState({ status: "loading", error: null });
       }
@@ -571,11 +571,28 @@ export class PlayerController {
       await this.ensureTrackLoaded(track);
       this.isTabActive = true;
       if (this.isTabActive || this.audioEngine.usesRustAudio()) {
-        const playbackStarted = this.playLoadedTrack();
+        let playbackStarted: boolean;
+        try {
+          playbackStarted = await this.playLoadedTrack();
+        } catch (playError) {
+          logInternalWarn("PlayerController.play playLoadedTrack threw, attempting recovery reload", {
+            error: playError instanceof Error ? playError.message : String(playError),
+            trackId: track.id,
+          });
+          const currentPos = this.getCurrentTime();
+          this.loadedTrackId = null;
+          this.audioEngine.stop();
+          await this.ensureTrackLoaded(track);
+          if (currentPos > 0) {
+            this.audioEngine.seekTo(currentPos);
+          }
+          playbackStarted = await this.playLoadedTrack();
+        }
+
         if (isResumingLoadedTrack) {
           this.setState({ status: "playing", error: null });
         }
-        if (!await playbackStarted) {
+        if (!playbackStarted) {
           this.setState({ status: "paused", error: null });
           return;
         }
@@ -991,12 +1008,16 @@ export class PlayerController {
 
   /**
    * Recovers audio playback when the hardware audio output route changes
-   * (e.g. Bluetooth headphones connected or disconnected, wired headset plugged in/out).
+   * (e.g. Bluetooth headphones connected or disconnected, wired headset plugged in/out, phone call ended).
    */
   async handleAudioOutputDeviceChanged(): Promise<void> {
     if (!usesRustAudioEngine()) return;
 
     logInternalInfo("PlayerController.handleAudioOutputDeviceChanged refreshing audio output route");
+
+    const track = this.state.currentTrack;
+    const wasPlaying = this.state.status === "playing";
+    const position = this.getCurrentTime();
 
     try {
       await setOutputDevice(null);
@@ -1004,6 +1025,31 @@ export class PlayerController {
       logInternalWarn("PlayerController.handleAudioOutputDeviceChanged setOutputDevice failed", {
         error: error instanceof Error ? error.message : String(error),
       });
+      return;
+    }
+
+    // setOutputDevice in Rust recreates the audio decks with track_id = None.
+    // Reset local loaded state and re-load the track onto the newly opened output device.
+    this.loadedTrackId = null;
+    this.audioEngine.stop();
+
+    if (track) {
+      try {
+        await this.ensureTrackLoaded(track);
+        if (position > 0) {
+          this.audioEngine.seekTo(position);
+        }
+        if (wasPlaying) {
+          const started = await this.playLoadedTrack();
+          if (started) {
+            this.setState({ status: "playing", error: null });
+          }
+        }
+      } catch (error) {
+        logInternalWarn("PlayerController.handleAudioOutputDeviceChanged track reload failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 
@@ -1287,7 +1333,7 @@ export class PlayerController {
       loadedTrackId: this.loadedTrackId,
     });
     
-    if (this.loadedTrackId === track.id) {
+    if (this.loadedTrackId === track.id && this.audioEngine.isDeckLoaded(track.id)) {
       logInternalDebug("PlayerController.ensureTrackLoaded already loaded", {
         trackId: track.id,
       });

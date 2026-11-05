@@ -63,6 +63,69 @@ function createSilentWavUrl(): string {
 
 let sharedAudioElement: HTMLAudioElement | null = null;
 let sharedBlobUrl: string | null = null;
+let sharedAudioContext: AudioContext | null = null;
+let sharedKeepaliveSource: AudioBufferSourceNode | null = null;
+let sharedGainNode: GainNode | null = null;
+
+function startWebAudioKeepalive(): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    if (!sharedAudioContext || sharedAudioContext.state === "closed") {
+      sharedAudioContext = new AudioContextClass();
+    }
+
+    if (sharedAudioContext.state === "suspended") {
+      void sharedAudioContext.resume().catch(() => {});
+    }
+
+    if (!sharedKeepaliveSource) {
+      // 1-second silent buffer looping continuously
+      const sampleRate = sharedAudioContext.sampleRate || 44100;
+      const buffer = sharedAudioContext.createBuffer(1, sampleRate, sampleRate);
+      const source = sharedAudioContext.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+
+      const gain = sharedAudioContext.createGain();
+      // Gain of 0.0001: inaudible to human ear, but marks audio graph as non-zero in Chromium
+      gain.gain.value = 0.0001;
+
+      source.connect(gain);
+      gain.connect(sharedAudioContext.destination);
+      source.start();
+
+      sharedKeepaliveSource = source;
+      sharedGainNode = gain;
+    }
+  } catch {
+    // Silent fail
+  }
+}
+
+function stopWebAudioKeepalive(): void {
+  try {
+    if (sharedKeepaliveSource) {
+      sharedKeepaliveSource.stop();
+      sharedKeepaliveSource.disconnect();
+      sharedKeepaliveSource = null;
+    }
+    if (sharedGainNode) {
+      sharedGainNode.disconnect();
+      sharedGainNode = null;
+    }
+    if (sharedAudioContext && sharedAudioContext.state === "running") {
+      void sharedAudioContext.suspend().catch(() => {});
+    }
+  } catch {
+    // Silent fail
+  }
+}
 
 function getOrCreateKeepaliveAudio(): HTMLAudioElement | null {
   if (typeof window === "undefined" || typeof document === "undefined") return null;
@@ -97,9 +160,13 @@ function getOrCreateKeepaliveAudio(): HTMLAudioElement | null {
 }
 
 export function startAudioKeepalive(): void {
-  // On Android, MediaPlaybackService runs as a foreground service with PARTIAL_WAKE_LOCK
-  // and maintains a WebView keepalive timer. Playing a silent HTML5 <audio> element here
-  // causes Android AudioManager focus collisions that interrupt active playback.
+  // 1. Web Audio API keepalive: Runs on Android & Desktop.
+  // It marks the WebView as producing audio in Chromium, preventing V8 renderer
+  // freezing in background, without requesting AudioManager focus on Android.
+  startWebAudioKeepalive();
+
+  // 2. HTML5 audio keepalive: Used on desktop. On Android, HTML5 audio
+  // competes with Android AudioManager, so we only use Web Audio there.
   if (isAndroidEnvironment()) return;
 
   try {
@@ -117,6 +184,8 @@ export function startAudioKeepalive(): void {
 }
 
 export function stopAudioKeepalive(): void {
+  stopWebAudioKeepalive();
+
   try {
     if (sharedAudioElement && !sharedAudioElement.paused) {
       sharedAudioElement.pause();

@@ -680,7 +680,7 @@ export function SearchOverlay({
         className={cn("flex flex-1 flex-col h-full w-full mx-auto", !isMobile && "max-w-2xl")}
       >
         {/* ────────────── Top YouTube Music Search Bar ────────────── */}
-        <header className="sticky top-0 z-20 flex items-center gap-2.5 px-3 pt-[max(env(safe-area-inset-top,0px),12px)] pb-3 bg-[#030303]/95 backdrop-blur-xl border-b border-white/5">
+        <header className="sticky top-0 z-20 flex items-center gap-2.5 px-3 pt-[max(env(safe-area-inset-top,0px),12px)] pb-3 bg-[#030303] border-b border-white/5">
           {/* Back Arrow */}
           <button
             type="button"

@@ -136,6 +136,7 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
     isHorizontalSwipeRef.current = null;
     if (rowElRef.current) {
       rowElRef.current.style.transition = "none";
+      rowElRef.current.style.willChange = "transform";
     }
   };
 
@@ -224,6 +225,7 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
     if (rowElRef.current) {
       rowElRef.current.style.transition = "transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)";
       rowElRef.current.style.transform = "translate3d(0, 0, 0)";
+      rowElRef.current.style.willChange = "auto";
     }
     if (leftActionRef.current) leftActionRef.current.style.opacity = "0";
     if (rightActionRef.current) rightActionRef.current.style.opacity = "0";
@@ -271,7 +273,7 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
         onClick={() => onPlay(absoluteIndex)}
-        className="relative z-10 flex items-center justify-between gap-3 py-2 px-2.5 rounded-xl bg-[#141414] hover:bg-[#1c1c1c] active:bg-[#202020] border border-white/5 cursor-pointer will-change-transform transform-gpu"
+        className="relative z-10 flex items-center justify-between gap-3 py-2 px-2.5 rounded-xl bg-[#141414] hover:bg-[#1c1c1c] active:bg-[#202020] border border-white/5 cursor-pointer"
       >
         <div className="size-11 shrink-0 overflow-hidden rounded-lg shadow-sm border border-white/10 bg-black/40">
           <TrackArtwork
@@ -305,6 +307,143 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
         </div>
       </div>
     </div>
+  );
+});
+
+interface SleepTimerButtonProps {
+  onClick: () => void;
+}
+
+const SleepTimerButton = memo(function SleepTimerButton({ onClick }: SleepTimerButtonProps) {
+  const [sleepRemainingMs, setSleepRemainingMs] = useState<number | null>(() =>
+    playerController.getSleepTimerRemainingMs(),
+  );
+  const isSleepActive = sleepRemainingMs !== null;
+
+  useEffect(() => {
+    const tick = () => setSleepRemainingMs(playerController.getSleepTimerRemainingMs());
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "relative flex size-10 items-center justify-center rounded-full transition-all active:scale-90",
+        isSleepActive
+          ? "text-primary font-bold bg-primary/20"
+          : "text-white/90 hover:text-white",
+      )}
+      aria-label="Sleep timer"
+      title="Sleep Timer"
+    >
+      <ClockIcon size={20} />
+      {isSleepActive && sleepRemainingMs !== null && (
+        <span className="absolute -bottom-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground tabular-nums shadow-sm">
+          {Math.ceil(sleepRemainingMs / 60000)}m
+        </span>
+      )}
+    </button>
+  );
+});
+
+interface SleepTimerSheetProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onTimerSet: (minutes: number | null) => void;
+}
+
+const SleepTimerSheet = memo(function SleepTimerSheet({
+  isOpen,
+  onClose,
+  onTimerSet,
+}: SleepTimerSheetProps) {
+  const [sleepRemainingMs, setSleepRemainingMs] = useState<number | null>(() =>
+    playerController.getSleepTimerRemainingMs(),
+  );
+  const isSleepActive = sleepRemainingMs !== null;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const tick = () => setSleepRemainingMs(playerController.getSleepTimerRemainingMs());
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [isOpen]);
+
+  const handleSelect = (mins: number | null) => {
+    playerController.setSleepTimer(mins);
+    onTimerSet(mins);
+    onClose();
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[80] flex flex-col justify-end">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="absolute inset-0 bg-black/60"
+          />
+
+          <motion.div
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 28, stiffness: 320 }}
+            className="relative z-10 flex flex-col rounded-t-3xl bg-[#1c1c1e] border-t border-white/10 px-5 pt-4 pb-8 shadow-2xl"
+          >
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/30" />
+
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <ClockIcon size={20} className="text-primary" />
+                <span className="text-base font-bold text-white">Sleep Timer</span>
+              </div>
+              {isSleepActive && sleepRemainingMs !== null && (
+                <span className="text-xs font-medium text-primary bg-primary/10 px-2.5 py-1 rounded-full tabular-nums">
+                  {formatMinutesSeconds(Math.ceil(sleepRemainingMs / 1000))} left
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1.5 pt-3">
+              {[15, 30, 45, 60, 90].map((mins) => (
+                <button
+                  key={mins}
+                  type="button"
+                  onClick={() => handleSelect(mins)}
+                  className="flex items-center justify-between px-3.5 py-3 rounded-xl text-left text-sm font-medium text-white/90 hover:bg-white/10 active:bg-white/15 transition-colors"
+                >
+                  <span>{mins} minutes</span>
+                  {isSleepActive &&
+                    sleepRemainingMs !== null &&
+                    Math.ceil(sleepRemainingMs / 60000) === mins && (
+                      <CheckIcon size={18} className="text-primary" />
+                    )}
+                </button>
+              ))}
+
+              {isSleepActive && (
+                <button
+                  type="button"
+                  onClick={() => handleSelect(null)}
+                  className="flex items-center justify-between px-3.5 py-3 rounded-xl text-left text-sm font-semibold text-destructive hover:bg-destructive/10 active:bg-destructive/15 transition-colors mt-1 border-t border-white/5"
+                >
+                  <span>Turn off timer</span>
+                </button>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 });
 
@@ -472,25 +611,9 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
     toastTimeoutRef.current = window.setTimeout(() => setToastMessage(null), 2500);
   };
 
-  // Quick Sleep Timer state & synchronization
-  const [sleepRemainingMs, setSleepRemainingMs] = useState<number | null>(() =>
-    playerController.getSleepTimerRemainingMs(),
-  );
   const [isSleepTimerSheetOpen, setIsSleepTimerSheetOpen] = useState(false);
-  const isSleepActive = sleepRemainingMs !== null;
 
-  useEffect(() => {
-    if (!isSleepActive) return;
-    const tick = () => setSleepRemainingMs(playerController.getSleepTimerRemainingMs());
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [isSleepActive]);
-
-  const handleSetSleepTimer = (minutes: number | null) => {
-    playerController.setSleepTimer(minutes);
-    setSleepRemainingMs(playerController.getSleepTimerRemainingMs());
-    setIsSleepTimerSheetOpen(false);
+  const handleTimerSet = (minutes: number | null) => {
     if (minutes !== null) {
       showToast(`Sleep timer set for ${minutes} min`);
     } else {
@@ -868,15 +991,19 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
           transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
           className="fixed inset-0 z-50 flex flex-col bg-[#050505] text-foreground select-none overflow-hidden transform-gpu will-change-transform"
         >
-          {/* Dynamic Ambient Background reacting to Artwork */}
+          {/* Subtle Ambient Background reacting to Artwork without blur rasterization cost */}
           {hdArtworkUrl && (
             <div
               key={hdArtworkUrl}
-              className="absolute inset-0 -z-20 pointer-events-none scale-110 bg-cover bg-center opacity-25 blur-xl transition-opacity duration-500 transform-gpu translate-z-0"
-              style={{ backgroundImage: `url("${hdArtworkUrl}")` }}
+              className="absolute inset-0 -z-20 pointer-events-none scale-105 bg-cover bg-center opacity-15 transition-opacity duration-300"
+              style={{
+                backgroundImage: `url("${hdArtworkUrl}")`,
+                maskImage: "radial-gradient(ellipse at center, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 75%)",
+                WebkitMaskImage: "radial-gradient(ellipse at center, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 75%)",
+              }}
             />
           )}
-          <div className="absolute inset-0 -z-10 pointer-events-none bg-gradient-to-b from-black/50 via-[#0a0a0a]/80 to-[#050505]" />
+          <div className="absolute inset-0 -z-10 pointer-events-none bg-gradient-to-b from-black/60 via-[#0a0a0a]/90 to-[#050505]" />
 
           {/* ── TOP HEADER (Chevron, Headphones/Lyrics Switcher, Cast, 3-Dots) ── */}
           {queueSheetState !== "full" && (
@@ -896,7 +1023,7 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
               </button>
 
               {/* Audio (Headphone) vs Lyrics Switcher Pill — absolutely centred so unequal L/R buttons don't shift it */}
-              <div className="absolute left-1/2 -translate-x-1/2 flex items-center rounded-full bg-black/40 backdrop-blur-md p-0.5 border border-white/10 shadow-sm">
+              <div className="absolute left-1/2 -translate-x-1/2 flex items-center rounded-full bg-white/10 p-0.5 border border-white/10 shadow-sm">
                 {/* Song / Audio Mode */}
                 <button
                   type="button"
@@ -932,25 +1059,7 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
 
               {/* Right Action Icons: Sleep Timer, Cast & 3-dots Menu */}
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setIsSleepTimerSheetOpen(true)}
-                  className={cn(
-                    "relative flex size-10 items-center justify-center rounded-full transition-all active:scale-90",
-                    isSleepActive
-                      ? "text-primary font-bold bg-primary/20"
-                      : "text-white/90 hover:text-white",
-                  )}
-                  aria-label="Sleep timer"
-                  title="Sleep Timer"
-                >
-                  <ClockIcon size={20} />
-                  {isSleepActive && sleepRemainingMs !== null && (
-                    <span className="absolute -bottom-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground tabular-nums shadow-sm">
-                      {Math.ceil(sleepRemainingMs / 60000)}m
-                    </span>
-                  )}
-                </button>
+                <SleepTimerButton onClick={() => setIsSleepTimerSheetOpen(true)} />
                 <button
                   type="button"
                   onClick={handleCastClick}
@@ -1140,39 +1249,33 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
                     {/* MAIN TRANSPORT CONTROLS */}
                     <div className="flex items-center justify-between w-full px-2 mt-2 mb-1">
                       {/* Shuffle */}
-                      <motion.button
+                      <button
                         type="button"
                         onClick={() => playerController.toggleShuffle()}
-                        whileTap={{ scale: 0.82 }}
-                        transition={{ type: "spring", stiffness: 500, damping: 20 }}
                         className={cn(
-                          "flex size-11 items-center justify-center transition-colors",
+                          "flex size-11 items-center justify-center transition-all active:scale-85 duration-100 ease-out",
                           isShuffle ? "text-white" : "text-white/70 hover:text-white",
                         )}
                         aria-label="Shuffle"
                       >
                         {isShuffle ? <ShuffleActiveIcon size={24} /> : <ShuffleIcon size={24} />}
-                      </motion.button>
+                      </button>
 
                       {/* Skip Previous */}
-                      <motion.button
+                      <button
                         type="button"
                         onClick={() => void playerController.skipToPrevious()}
-                        whileTap={{ scale: 0.84 }}
-                        transition={{ type: "spring", stiffness: 500, damping: 20 }}
-                        className="flex size-12 items-center justify-center text-white transition-opacity hover:opacity-80"
+                        className="flex size-12 items-center justify-center text-white transition-all active:scale-85 duration-100 ease-out hover:opacity-80"
                         aria-label="Previous track"
                       >
                         <SkipPreviousIcon size={32} />
-                      </motion.button>
+                      </button>
 
                       {/* Big White Circular Play/Pause */}
-                      <motion.button
+                      <button
                         type="button"
                         onClick={() => void playerController.togglePlayPause()}
-                        whileTap={{ scale: 0.88 }}
-                        transition={{ type: "spring", stiffness: 500, damping: 22 }}
-                        className="flex size-16 items-center justify-center rounded-full bg-white text-black shadow-2xl hover:scale-105 transition-transform"
+                        className="flex size-16 items-center justify-center rounded-full bg-white text-black shadow-2xl active:scale-90 duration-100 ease-out transition-transform"
                         aria-label={isPlaying ? "Pause" : "Play"}
                       >
                         {isLoading ? (
@@ -1182,28 +1285,24 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
                         ) : (
                           <PlayActiveIcon size={32} className="translate-x-0.5" />
                         )}
-                      </motion.button>
+                      </button>
 
                       {/* Skip Next */}
-                      <motion.button
+                      <button
                         type="button"
                         onClick={() => void playerController.skipToNext()}
-                        whileTap={{ scale: 0.84 }}
-                        transition={{ type: "spring", stiffness: 500, damping: 20 }}
-                        className="flex size-12 items-center justify-center text-white transition-opacity hover:opacity-80"
+                        className="flex size-12 items-center justify-center text-white transition-all active:scale-85 duration-100 ease-out hover:opacity-80"
                         aria-label="Next track"
                       >
                         <SkipNextIcon size={32} />
-                      </motion.button>
+                      </button>
 
                       {/* Repeat */}
-                      <motion.button
+                      <button
                         type="button"
                         onClick={() => playerController.cyclePlaybackOrderMode()}
-                        whileTap={{ scale: 0.82 }}
-                        transition={{ type: "spring", stiffness: 500, damping: 20 }}
                         className={cn(
-                          "flex size-11 items-center justify-center transition-colors",
+                          "flex size-11 items-center justify-center transition-all active:scale-85 duration-100 ease-out",
                           isRepeatAll || isRepeatOne
                             ? "text-white"
                             : "text-white/70 hover:text-white",
@@ -1217,7 +1316,7 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
                         ) : (
                           <RepeatIcon size={24} />
                         )}
-                      </motion.button>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1265,7 +1364,7 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
                               }
                             }}
                             className={cn(
-                              "transition-all duration-300 select-text leading-relaxed",
+                              "transition-colors duration-200 select-text leading-relaxed",
                               isSeekable ? "cursor-pointer" : "cursor-default",
                               isActive
                                 ? "text-white font-bold text-2xl sm:text-3xl scale-[1.03] origin-left drop-shadow-md"
@@ -1492,72 +1591,11 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
         )}
 
         {/* Sleep Timer Bottom Sheet Modal */}
-        <AnimatePresence>
-          {isSleepTimerSheetOpen && (
-            <div className="fixed inset-0 z-[80] flex flex-col justify-end">
-              {/* Dim Backdrop */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setIsSleepTimerSheetOpen(false)}
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-              />
-
-              {/* Sheet content */}
-              <motion.div
-                initial={{ y: "100%" }}
-                animate={{ y: 0 }}
-                exit={{ y: "100%" }}
-                transition={{ type: "spring", damping: 28, stiffness: 320 }}
-                className="relative z-10 flex flex-col rounded-t-3xl bg-[#1c1c1e] border-t border-white/10 px-5 pt-4 pb-8 shadow-2xl"
-              >
-                {/* Drag handle */}
-                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/30" />
-
-                <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                  <div className="flex items-center gap-2">
-                    <ClockIcon size={20} className="text-primary" />
-                    <span className="text-base font-bold text-white">Sleep Timer</span>
-                  </div>
-                  {isSleepActive && sleepRemainingMs !== null && (
-                    <span className="text-xs font-medium text-primary bg-primary/10 px-2.5 py-1 rounded-full tabular-nums">
-                      {formatMinutesSeconds(Math.ceil(sleepRemainingMs / 1000))} left
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-1.5 pt-3">
-                  {[15, 30, 45, 60, 90].map((mins) => (
-                    <button
-                      key={mins}
-                      type="button"
-                      onClick={() => handleSetSleepTimer(mins)}
-                      className="flex items-center justify-between px-3.5 py-3 rounded-xl text-left text-sm font-medium text-white/90 hover:bg-white/10 active:bg-white/15 transition-colors"
-                    >
-                      <span>{mins} minutes</span>
-                      {isSleepActive &&
-                        sleepRemainingMs !== null &&
-                        Math.ceil(sleepRemainingMs / 60000) === mins && (
-                          <CheckIcon size={18} className="text-primary" />
-                        )}
-                    </button>
-                  ))}
-
-                  {isSleepActive && (
-                    <button
-                      type="button"
-                      onClick={() => handleSetSleepTimer(null)}
-                      className="flex items-center justify-between px-3.5 py-3 rounded-xl text-left text-sm font-semibold text-destructive hover:bg-destructive/10 active:bg-destructive/15 transition-colors mt-1 border-t border-white/5"
-                    >
-                      <span>Turn off timer</span>
-                    </button>
-                  )}
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+        <SleepTimerSheet
+          isOpen={isSleepTimerSheetOpen}
+          onClose={() => setIsSleepTimerSheetOpen(false)}
+          onTimerSet={handleTimerSet}
+        />
       </motion.div>
     )}
   </AnimatePresence>

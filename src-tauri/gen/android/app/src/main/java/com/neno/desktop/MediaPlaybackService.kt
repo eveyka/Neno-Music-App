@@ -113,20 +113,42 @@ class MediaPlaybackService : Service() {
 
     private var audioManager: AudioManager? = null
     private var resumeOnFocusGain: Boolean = false
+    private var resumeAfterCall: Boolean = false
+    private var isCallOngoing: Boolean = false
     private var audioFocusRequest: AudioFocusRequest? = null
+
+    private var pendingResumeRunnable: Runnable? = null
+    private val resumeHandler = Handler(Looper.getMainLooper())
+
+    private fun scheduleResumePlayback(delayMs: Long) {
+        pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
+        val runnable = Runnable {
+            pendingResumeRunnable = null
+            dispatchPlay()
+        }
+        pendingResumeRunnable = runnable
+        resumeHandler.postDelayed(runnable, delayMs)
+    }
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS -> {
                 // Permanent loss of audio focus (e.g. another music app started)
-                resumeOnFocusGain = false
-                if (isPlaying && currentPlaybackState == "playing") {
+                // If a phone call is currently active, do NOT discard resume intent —
+                // Android's InCallService often triggers AUDIOFOCUS_LOSS during an ongoing call.
+                if (!isCallOngoing) {
+                    resumeOnFocusGain = false
+                    resumeAfterCall = false
+                    pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
+                    pendingResumeRunnable = null
+                }
+                if (isPlaying || currentPlaybackState == "playing") {
                     dispatchPause(isTransient = false)
                 }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                 // Transient loss of audio focus (e.g. incoming call, another app playing video)
-                if (isPlaying && currentPlaybackState == "playing") {
+                if (isPlaying || currentPlaybackState == "playing") {
                     resumeOnFocusGain = true
                     dispatchPause(isTransient = true)
                 }
@@ -136,9 +158,14 @@ class MediaPlaybackService : Service() {
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 // Focus regained! (call ended, video finished, audio focus restored)
-                if (resumeOnFocusGain) {
+                if (isCallOngoing) {
+                    // Call is still active according to telephony manager; wait for CALL_STATE_IDLE
+                    return@OnAudioFocusChangeListener
+                }
+                if (resumeOnFocusGain || resumeAfterCall) {
                     resumeOnFocusGain = false
-                    dispatchPlay()
+                    resumeAfterCall = false
+                    scheduleResumePlayback(300L)
                 }
             }
         }
@@ -205,6 +232,7 @@ class MediaPlaybackService : Service() {
                 MainActivity.instance?.let { act ->
                     act.runOnUiThread {
                         act.targetWebView?.let { wv ->
+                            wv.onResume()
                             wv.resumeTimers()
                             wv.evaluateJavascript(
                                 "if (typeof window.__neno_background_tick === 'function') { window.__neno_background_tick(); } else { void 0; }",
@@ -241,7 +269,7 @@ class MediaPlaybackService : Service() {
     private var isAudioRouteMonitoringActive: Boolean = false
 
     private fun notifyAudioDeviceChanged() {
-        if (!isAudioRouteMonitoringActive) return
+        if (!isAudioRouteMonitoringActive || isCallOngoing) return
         val now = System.currentTimeMillis()
         if (now - lastServiceRouteEventTime < 1000) return
         lastServiceRouteEventTime = now
@@ -325,6 +353,8 @@ class MediaPlaybackService : Service() {
             if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
                 if (isPlaying) {
                     resumeOnFocusGain = false
+                    resumeAfterCall = false
+                    isCallOngoing = false
                     dispatchPause(isTransient = false)
                 }
             }
@@ -383,16 +413,23 @@ class MediaPlaybackService : Service() {
             TelephonyManager.CALL_STATE_RINGING,
             TelephonyManager.CALL_STATE_OFFHOOK -> {
                 // Phone call incoming or active!
-                if (isPlaying) {
+                if (isPlaying || currentPlaybackState == "playing") {
+                    resumeAfterCall = true
                     resumeOnFocusGain = true
+                    isCallOngoing = true
                     dispatchPause(isTransient = true)
+                } else if (state == TelephonyManager.CALL_STATE_OFFHOOK && isCallOngoing) {
+                    // Call answered while already paused for ringing
                 }
             }
             TelephonyManager.CALL_STATE_IDLE -> {
                 // Call ended ("call cut hone ke baad")! Auto-resume playback.
-                if (resumeOnFocusGain) {
-                    resumeOnFocusGain = false
-                    dispatchPlay()
+                val shouldResume = isCallOngoing && (resumeAfterCall || resumeOnFocusGain)
+                isCallOngoing = false
+                resumeAfterCall = false
+                resumeOnFocusGain = false
+                if (shouldResume) {
+                    scheduleResumePlayback(500L)
                 }
             }
         }
@@ -409,9 +446,13 @@ class MediaPlaybackService : Service() {
 
     // ── Systematic Play / Pause Dispatching ────────────────────────────
     private fun dispatchPlay() {
+        pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
+        pendingResumeRunnable = null
         isPlaying = true
         currentPlaybackState = "playing"
         resumeOnFocusGain = false
+        resumeAfterCall = false
+        isCallOngoing = false
         requestAudioFocus()
         acquireWakeLock()
         registerNoisyReceiver()
@@ -420,6 +461,12 @@ class MediaPlaybackService : Service() {
     }
 
     private fun dispatchPause(isTransient: Boolean = false) {
+        if (!isTransient && !isCallOngoing) {
+            resumeOnFocusGain = false
+            resumeAfterCall = false
+        }
+        pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
+        pendingResumeRunnable = null
         isPlaying = false
         currentPlaybackState = "paused"
         if (!isTransient) {
@@ -879,7 +926,11 @@ class MediaPlaybackService : Service() {
     }
 
     override fun onDestroy() {
+        pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
+        pendingResumeRunnable = null
         resumeOnFocusGain = false
+        resumeAfterCall = false
+        isCallOngoing = false
         serviceKeepaliveHandler.removeCallbacks(serviceKeepaliveRunnable)
         wakeLockReleaseHandler.removeCallbacks(wakeLockReleaseRunnable)
         abandonAudioFocus()

@@ -139,19 +139,17 @@ export function MobilePlayerBarInner({ onOpenNowPlaying, className }: MobilePlay
   return (
     <AnimatePresence>
       <motion.div
-        layout
         initial={{ y: 24, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 24, opacity: 0 }}
-        whileTap={{ scale: 0.985 }}
-        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+        transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
         onClick={onOpenNowPlaying}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         className={cn(
-          "relative flex w-full flex-col overflow-hidden rounded-xl transform-gpu will-change-transform",
+          "relative flex w-full flex-col overflow-hidden rounded-xl",
           "bg-[#212124] border border-white/[0.08] shadow-[0_8px_24px_rgba(0,0,0,0.7)]",
-          "cursor-pointer select-none",
+          "cursor-pointer select-none active:scale-[0.985] transition-transform duration-100 ease-out",
           className,
         )}
       >

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Neno",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "identifier": "com.neno.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -56,8 +56,8 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMyMDQ0MjEzQjkxMThGQ0MKUldUTWp4RzVFMElFTXZGMmxnOC84VXlUTkZyaStyQzFkcXd6UVczeGNBNkVuWWU3MjdIM2JLVkgK",
       "endpoints": [
-        "https://github.com/jupiterbania/Neno-Music-App/releases/latest/download/latest.json",
-        "https://raw.githubusercontent.com/jupiterbania/Neno-Music-App/updater-channel/latest.json"
+        "https://github.com/eveyka/Neno-Music-App/releases/latest/download/latest.json",
+        "https://raw.githubusercontent.com/eveyka/Neno-Music-App/updater-channel/latest.json"
       ]
     }
   }

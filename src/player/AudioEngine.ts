@@ -315,6 +315,20 @@ export class AudioEngine {
     return this.useRustAudio;
   }
 
+  /**
+   * Returns true if the active engine deck currently holds an audio source
+   * (and optionally matches the given videoId).
+   */
+  isDeckLoaded(videoId?: string): boolean {
+    if (this.useRustAudio) {
+      return Boolean(this.rustTrackId && (!videoId || this.rustTrackId === videoId));
+    }
+    if (this.useNativeAudio && !this.iframeFallbackActive) {
+      return Boolean(this.audio && this.currentVideoId && (!videoId || this.currentVideoId === videoId));
+    }
+    return Boolean(this.currentVideoId && (!videoId || this.currentVideoId === videoId));
+  }
+
   async loadTrack(
     videoId: string,
     audioData?: ArrayBuffer,

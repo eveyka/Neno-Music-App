@@ -45,7 +45,7 @@ function MobileHeaderInner({
   };
 
   return (
-    <header className="sticky top-0 z-20 w-full mb-2 flex h-13 items-center justify-between gap-2 bg-background/98 backdrop-blur-md px-2.5 py-1.5 transition-colors border-b border-white/10 overflow-hidden">
+    <header className="sticky top-0 z-20 w-full mb-2 flex h-13 items-center justify-between gap-2 bg-background px-2.5 py-1.5 transition-colors border-b border-white/10 overflow-hidden">
       {/* Brand Identity */}
       <motion.div
         whileTap={{ scale: 0.95 }}
