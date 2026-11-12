@@ -69,7 +69,7 @@ export const AlbumCard = memo(function AlbumCard({
        * `auto` keyword means the guess only ever applies to a card that has not yet been on
        * screen once; after that the browser uses the size it actually measured.
        */
-      className="group/card flex w-full cursor-pointer flex-col gap-2 rounded-xl p-1.5 sm:p-2 transition-all hover:bg-card/75 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [content-visibility:auto] [contain-intrinsic-size:auto_232px]"
+      className="group/card flex w-full cursor-pointer flex-col gap-2 rounded-xl p-1.5 sm:p-2 transition-all hover:bg-card/75 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       onKeyDown={handleKeyDown}

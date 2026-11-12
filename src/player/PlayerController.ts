@@ -1776,6 +1776,32 @@ export class PlayerController {
   }
 
   /**
+   * Explicitly invoked from the Android background keepalive tick (window.__neno_background_tick)
+   * to ensure queue auto-advance occurs even if Tauri's native-audio-ended event was deferred.
+   */
+  checkBackgroundTrackEnded(): void {
+    if (this.state.status !== "playing" || this.handlingTrackEnd || this.transitioning) return;
+    const duration = this.audioEngine.getDuration();
+    const position = this.audioEngine.getCurrentTime();
+    if (duration > 0 && position >= duration - 0.5) {
+      logInternalInfo("PlayerController.checkBackgroundTrackEnded auto-advancing queue in background", {
+        position,
+        duration,
+      });
+      void this.handleTrackEnded();
+    }
+  }
+
+  /**
+   * Triggered directly by the native Android media control bridge when track playback completes.
+   */
+  handleTrackEndedViaBridge(): void {
+    if (this.handlingTrackEnd) return;
+    logInternalInfo("PlayerController.handleTrackEndedViaBridge executing");
+    void this.handleTrackEnded();
+  }
+
+  /**
    * Pre-warms a specific track on user interaction (hover/touch) so playback starts instantly when clicked.
    *
    * The result is stored in `warmedStream` so that when the user actually clicks to play, the

@@ -670,7 +670,7 @@ export function HomePage({
             type="button"
             onClick={() => void handleRefresh()}
             disabled={isRefreshing}
-            className="flex items-center gap-1.5 rounded-full bg-card/40 backdrop-blur-xl border border-white/[0.08] px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:bg-card/70 hover:border-white/[0.2] hover:text-foreground active:scale-95 disabled:opacity-50 shadow-xs"
+            className="flex items-center gap-1.5 rounded-full bg-card/90 border border-white/[0.08] px-3 py-1 text-xs font-semibold text-muted-foreground transition-all hover:bg-card hover:border-white/[0.2] hover:text-foreground active:scale-95 disabled:opacity-50 shadow-xs"
             aria-label="Refresh recommendations"
           >
             <RefreshIcon size={14} className={cn(isRefreshing && "animate-spin text-primary")} />
@@ -829,7 +829,7 @@ export function HomePage({
       </div>
 
       {libraryState.status === "signed-out" && (
-        <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl bg-card/40 backdrop-blur-xl border border-white/[0.08] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.18)]">
+        <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl bg-card/90 border border-white/[0.08] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.18)]">
           <div className="flex flex-col gap-0.5">
             <h2 className="text-base font-bold text-foreground">You&apos;re not signed in</h2>
             <p className="text-xs sm:text-sm text-muted-foreground">Sign in to access your YouTube Music history, playlists, and albums.</p>
@@ -952,7 +952,7 @@ export function HomePage({
             {compactRecent.map((track) => (
               <div
                 key={track.id}
-                className="group/recent relative flex items-center gap-2.5 rounded-2xl border border-white/[0.08] bg-card/40 backdrop-blur-xl p-1.5 text-left transition-all duration-300 hover:border-white/[0.22] hover:bg-card/70 hover:shadow-[0_4px_20px_rgba(0,0,0,0.22)] active:scale-[0.97] overflow-hidden"
+                className="group/recent relative flex items-center gap-2.5 rounded-2xl border border-white/[0.08] bg-card/90 p-1.5 text-left transition-all duration-300 hover:border-white/[0.22] hover:bg-card hover:shadow-[0_4px_20px_rgba(0,0,0,0.22)] active:scale-[0.97] overflow-hidden"
               >
                 <button
                   type="button"

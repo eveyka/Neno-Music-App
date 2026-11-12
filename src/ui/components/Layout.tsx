@@ -256,7 +256,7 @@ export function Layout({
             Everything after this is positioned, so DOM order alone puts the chrome above it;
             no z-index juggling, and no stacking context that would trap the blur.
           */}
-          {ambientArtwork ? (
+          {!isMobile && ambientArtwork ? (
             <span
               key={ambientArtwork}
               className="pointer-events-none absolute inset-x-0 top-0 h-[22rem] overflow-hidden [mask-image:linear-gradient(to_bottom,background_25%,transparent)] rounded-tl-lg transform-gpu will-change-transform"

@@ -997,6 +997,8 @@ impl Engine {
             self.decks[index].clear();
             self.playing = false;
             let _ = self.app.emit("native-audio-ended", EndedEvent { track_id });
+            #[cfg(target_os = "android")]
+            notify_android_track_ended();
             return;
         }
 
@@ -1013,3 +1015,41 @@ impl Engine {
         );
     }
 }
+
+#[cfg(target_os = "android")]
+fn notify_android_track_ended() {
+    unsafe {
+        let ctx = ndk_context::android_context();
+        let vm_ptr = ctx.vm();
+        if vm_ptr.is_null() {
+            return;
+        }
+        let vm = match jni::JavaVM::from_raw(vm_ptr as *mut jni::sys::JavaVM) {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        if let Ok(mut env) = vm.attach_current_thread_permanently() {
+            if let Ok(main_activity_class) = env.find_class("com/neno/desktop/MainActivity") {
+                if let Ok(instance_val) = env.get_static_field(
+                    &main_activity_class,
+                    "instance",
+                    "Lcom/neno/desktop/MainActivity;",
+                ) {
+                    if let Ok(instance_obj) = instance_val.l() {
+                        if !instance_obj.is_null() {
+                            if let Ok(cmd_str) = env.new_string("trackEnded") {
+                                let _ = env.call_method(
+                                    &instance_obj,
+                                    "dispatchMediaControl",
+                                    "(Ljava/lang/String;)V",
+                                    &[(&cmd_str).into()],
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

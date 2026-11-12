@@ -686,7 +686,7 @@ button, a, input, select, [role="button"], [role="tab"] {
 
 /* Ensure images decode smoothly with zero layout thrashing */
 img {
-  content-visibility: auto;
+  content-visibility: visible;
 }
 
 /* Smooth momentum scrolling for mobile containers */

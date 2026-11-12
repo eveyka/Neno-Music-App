@@ -96,7 +96,7 @@ const ArtistTile = memo(function ArtistTile({ artist, onOpen }: { artist: Artist
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-28 sm:w-32 shrink-0 snap-start flex-col items-center gap-2 rounded-xl p-1.5 sm:p-2 text-center transition-all hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [content-visibility:auto] [contain-intrinsic-size:auto_140px]"
+      className="flex w-28 sm:w-32 shrink-0 snap-start flex-col items-center gap-2 rounded-xl p-1.5 sm:p-2 text-center transition-all hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <TrackArtwork
         className="size-20 sm:size-24 rounded-full shadow-sm"
@@ -115,7 +115,7 @@ const PlaylistTile = memo(function PlaylistTile({ playlist, onOpen }: { playlist
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-32 sm:w-36 shrink-0 snap-start flex-col gap-2 rounded-xl p-1.5 sm:p-2 text-left transition-all hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [content-visibility:auto] [contain-intrinsic-size:auto_180px]"
+      className="flex w-32 sm:w-36 shrink-0 snap-start flex-col gap-2 rounded-xl p-1.5 sm:p-2 text-left transition-all hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <TrackArtwork
         className="size-28 sm:size-32 rounded-xl object-cover shadow-sm border border-white/10"

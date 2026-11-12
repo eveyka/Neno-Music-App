@@ -98,12 +98,16 @@ type PlayerControllerMethod =
   | "generateQueueAfter"
   | "warmTrack"
   | "handleAudioOutputDeviceChanged"
-  | "tickTransition";
+  | "tickTransition"
+  | "checkBackgroundTrackEnded"
+  | "handleTrackEndedViaBridge";
 
 export type PlayerControllerActions = Pick<PlayerController, PlayerControllerMethod>;
 
 class ActivePlayerController implements PlayerControllerActions {
   tickTransition = () => tabManager.getActivePlayer().tickTransition();
+  checkBackgroundTrackEnded = () => tabManager.getActivePlayer().checkBackgroundTrackEnded();
+  handleTrackEndedViaBridge = () => tabManager.getActivePlayer().handleTrackEndedViaBridge();
   handleAudioOutputDeviceChanged = () =>
     tabManager.getActivePlayer().handleAudioOutputDeviceChanged();
   loadTrack = async (track: Parameters<PlayerController["loadTrack"]>[0]) =>

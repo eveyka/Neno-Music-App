@@ -64,13 +64,17 @@ class MainActivity : TauriActivity() {
     private val backgroundKeepaliveHandler = Handler(Looper.getMainLooper())
     private val backgroundKeepaliveRunnable = object : Runnable {
         override fun run() {
-            targetWebView?.let { wv ->
-                wv.resumeTimers()
-                wv.evaluateJavascript(
-                    "if (typeof window.__neno_background_tick === 'function') { window.__neno_background_tick(); } else { void 0; }",
-                    null
-                )
-            }
+            try {
+                Rust.resume()
+                targetWebView?.let { wv ->
+                    wv.onResume()
+                    wv.resumeTimers()
+                    wv.evaluateJavascript(
+                        "if (typeof window.__neno_background_tick === 'function') { window.__neno_background_tick(); } else { void 0; }",
+                        null
+                    )
+                }
+            } catch (_: Throwable) {}
             backgroundKeepaliveHandler.postDelayed(this, 1000)
         }
     }
@@ -97,6 +101,11 @@ class MainActivity : TauriActivity() {
         } catch (_: Throwable) {}
         super.onCreate(savedInstanceState)
         instance = this
+
+        // Prevent WryLifecycleObserver from putting Rust/Tao into Suspended state during background playback
+        try {
+            androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.removeObserver(WryLifecycleObserver)
+        } catch (_: Throwable) {}
 
         try {
             initAndroidContext(applicationContext)
@@ -162,6 +171,9 @@ class MainActivity : TauriActivity() {
         // Counteract WryActivity calling webView.onPause() which stops media and JS
         targetWebView?.onResume()
         targetWebView?.resumeTimers()
+        try {
+            Rust.resume()
+        } catch (_: Throwable) {}
         // Start the keepalive so Tauri's JS events (e.g. native-audio-ended) are
         // flushed promptly even while the screen is off or the app is minimised.
         startBackgroundKeepalive()
@@ -172,6 +184,10 @@ class MainActivity : TauriActivity() {
         // Keep webview media playback engine active when screen locks or app minimizes
         targetWebView?.onResume()
         targetWebView?.resumeTimers()
+        try {
+            Rust.start()
+            Rust.resume()
+        } catch (_: Throwable) {}
         // Keepalive was already started in onPause; ensure it's running here too in
         // case onStop is reached without a prior onPause (rare but possible).
         startBackgroundKeepalive()
@@ -216,7 +232,7 @@ class MainActivity : TauriActivity() {
                     allowContentAccess = true
                 }
                 webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-                webView.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                webView.setBackgroundColor(android.graphics.Color.parseColor("#050505"))
                 webView.isVerticalScrollBarEnabled = false
                 webView.isHorizontalScrollBarEnabled = false
                 // Remove the edge-glow overscroll effect: it triggers a GPU compositing

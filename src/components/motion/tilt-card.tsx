@@ -37,23 +37,10 @@ const SETTLE_MS = 500;
  * card — they are a few numbers each and cost nothing until something writes to them — but
  * nothing they produce reaches the DOM until the pointer arrives.
  */
-export function TiltCard({ children, max = 12, glare = true, className }: TiltCardProps) {
+function TiltCardInteractive({ children, max = 12, glare = true, className }: TiltCardProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const reduce = useReduceMotion();
-  const canHover = useHoverCapable();
-  // Decorative cursor-follow: skip on touch (phantom hover) and reduced motion.
-  const enabled = !reduce && canHover;
   const [tilting, setTilting] = useState(false);
   const settleTimerRef = useRef(0);
-  /*
-   * Measured once on enter rather than on every move. `getBoundingClientRect` flushes pending
-   * layout, and doing that inside a mousemove handler is the classic way to turn a hover into
-   * a per-frame reflow.
-   *
-   * ponytail: the rect goes stale if the page scrolls while the pointer sits still on a card,
-   * which tilts it from a slightly wrong origin until the next enter. If that ever shows,
-   * re-measure from a scroll listener on the page root rather than from the move handler.
-   */
   const rectRef = useRef<DOMRect | null>(null);
 
   const rx = useMotionValue(0);
@@ -70,7 +57,6 @@ export function TiltCard({ children, max = 12, glare = true, className }: TiltCa
   useEffect(() => () => window.clearTimeout(settleTimerRef.current), []);
 
   const onEnter = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!enabled) return;
     window.clearTimeout(settleTimerRef.current);
     rectRef.current = e.currentTarget.getBoundingClientRect();
     setTilting(true);
@@ -78,7 +64,7 @@ export function TiltCard({ children, max = 12, glare = true, className }: TiltCa
 
   const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = rectRef.current;
-    if (!rect || !enabled) return;
+    if (!rect) return;
     const px = (e.clientX - rect.left) / rect.width;
     const py = (e.clientY - rect.top) / rect.height;
     ry.set((px - 0.5) * max);
@@ -90,8 +76,6 @@ export function TiltCard({ children, max = 12, glare = true, className }: TiltCa
   const onLeave = () => {
     rx.set(0);
     ry.set(0);
-    // The transform has to outlive the pointer: dropping it on leave would snap the card flat
-    // instead of letting the spring bring it back.
     window.clearTimeout(settleTimerRef.current);
     settleTimerRef.current = window.setTimeout(() => setTilting(false), SETTLE_MS);
   };
@@ -102,18 +86,13 @@ export function TiltCard({ children, max = 12, glare = true, className }: TiltCa
       onMouseEnter={onEnter}
       onMouseMove={onMove}
       onMouseLeave={onLeave}
-      /*
-       * The resting branch says `none` rather than dropping the keys. Motion writes the
-       * transform to the element imperatively, so a style object that simply stops mentioning
-       * it leaves the last value — and the layer it earned — sitting on the node forever.
-       */
       style={tilting
         ? { transform, transformStyle: "preserve-3d", willChange: "transform" }
         : { transform: "none", transformStyle: "flat", willChange: "auto" }}
       className={cn("relative overflow-hidden rounded-2xl", className)}
     >
       {children}
-      {glare && enabled && tilting ? (
+      {glare && tilting ? (
         <motion.div
           aria-hidden
           style={{ background: glareBg }}
@@ -121,5 +100,21 @@ export function TiltCard({ children, max = 12, glare = true, className }: TiltCa
         />
       ) : null}
     </motion.div>
+  );
+}
+
+export function TiltCard({ children, max = 12, glare = true, className }: TiltCardProps) {
+  const reduce = useReduceMotion();
+  const canHover = useHoverCapable();
+  const enabled = !reduce && canHover;
+
+  if (!enabled) {
+    return <div className={cn("relative overflow-hidden rounded-2xl", className)}>{children}</div>;
+  }
+
+  return (
+    <TiltCardInteractive max={max} glare={glare} className={className}>
+      {children}
+    </TiltCardInteractive>
   );
 }

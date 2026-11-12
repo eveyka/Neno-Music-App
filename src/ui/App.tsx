@@ -2165,7 +2165,7 @@ export default function App() {
           ) : (
           <motion.div
             key={activeViewKey}
-            className="min-h-0 flex-1 transform-gpu"
+            className="min-h-0 flex-1"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

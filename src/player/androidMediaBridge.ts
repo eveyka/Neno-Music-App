@@ -266,10 +266,15 @@ export function useAndroidMediaBridge(): void {
             console.warn("[androidMediaBridge] handleAudioOutputDeviceChanged failed:", err);
           });
           break;
+        case "trackEnded":
+        case "ended":
+          playerController.handleTrackEndedViaBridge?.();
+          break;
         case "backgroundTick":
         case "tick":
           try {
             playerController.tickTransition?.();
+            playerController.checkBackgroundTrackEnded?.();
           } catch {
             // Ignore
           }
@@ -282,6 +287,7 @@ export function useAndroidMediaBridge(): void {
     const handleBackgroundTick = () => {
       try {
         playerController.tickTransition?.();
+        playerController.checkBackgroundTrackEnded?.();
       } catch {
         // Ignore
       }
