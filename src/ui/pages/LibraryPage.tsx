@@ -10,7 +10,17 @@ import {
 } from "react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
-import { CloseIcon, EyeClosedIcon, EyeIcon, SearchIcon } from "@/ui/icons";
+import {
+  CheckIcon,
+  CloseIcon,
+  DownloadIcon,
+  EyeClosedIcon,
+  EyeIcon,
+  HeartIcon,
+  PlayActiveIcon,
+  SearchIcon,
+  ShuffleIcon,
+} from "@/ui/icons";
 import {
   Select,
   SelectContent,
@@ -19,13 +29,16 @@ import {
   SelectValue,
 } from "@/components/motion/select";
 import type { Album, Artist, Playlist, Track } from "../../datasource/types";
-import type { LibraryState } from "../../player/LibraryController";
+import type { LibraryController, LibraryState } from "../../player/LibraryController";
 import type { PlayerControllerActions } from "../../player/playerStore";
-import { queueDownloads } from "../../player/offlineStore";
+import { queueDownloads, useOfflineState } from "../../player/offlineStore";
 import { getLocalPlaylistItems, subscribeToLocalPlaylists } from "../../player/localPlaylists";
+import {
+  setAutoDownloadLikedEnabled,
+  useAutoDownloadLikedEnabled,
+} from "../settings/autoDownloadLiked";
 import { AlbumCard } from "../components/AlbumCard";
 import { SelectionBar } from "../components/SelectionBar";
-import { TrackArtwork } from "../components/TrackArtwork";
 import { TrackRow } from "../components/TrackRow";
 import { useTrackContextMenu } from "../components/TrackContextMenu";
 import { usePlaylistContextMenu } from "../components/PlaylistContextMenu";
@@ -33,20 +46,21 @@ import { useNowPlaying } from "../hooks/useNowPlaying";
 import { useTrackSelection } from "../hooks/useTrackSelection";
 import { isLikedSongsId, likedSongsCover } from "../likedSongsArtwork";
 import { useHiddenPlaylistIds } from "../settings/hiddenPlaylists";
+import { DownloadsPage } from "./DownloadsPage";
 
-type LibraryTab = "songs" | "albums" | "artists" | "playlists";
+export type LibraryTab = "downloads" | "liked" | "playlists" | "albums";
 
 const TABS: Array<{ value: LibraryTab; label: string }> = [
-  { value: "songs", label: "Songs" },
-  { value: "albums", label: "Albums" },
-  { value: "artists", label: "Artists" },
+  { value: "downloads", label: "Downloads" },
+  { value: "liked", label: "Liked Songs" },
   { value: "playlists", label: "Playlists" },
+  { value: "albums", label: "Albums" },
 ];
 
-/* Roomier than the old 9rem: responsive 2-column grid on mobile, expanding to multi-column on desktop */
-const GRID = "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:[grid-template-columns:repeat(auto-fill,minmax(11rem,1fr))] lg:gap-5";
+/* Responsive 2-column grid on mobile, expanding to multi-column on desktop */
+const GRID =
+  "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:[grid-template-columns:repeat(auto-fill,minmax(11rem,1fr))] lg:gap-5";
 
-/** "recent" is YouTube's own order, which is newest-first — so it sorts by doing nothing. */
 type LibrarySort = "recent" | "title" | "artist";
 
 function matches(query: string, ...fields: Array<string | undefined>): boolean {
@@ -54,12 +68,8 @@ function matches(query: string, ...fields: Array<string | undefined>): boolean {
   return fields.some((field) => field?.toLocaleLowerCase().includes(query));
 }
 
-/**
- * Numeric and case-insensitive, so "Album 2" sorts before "Album 10" and casing does not
- * split the list. A bare `localeCompare` gets both of those wrong.
- */
 function compareText(left: string | undefined, right: string | undefined): number {
-  return (left || "￿").localeCompare(right || "￿", undefined, {
+  return (left || "").localeCompare(right || "", undefined, {
     numeric: true,
     sensitivity: "base",
   });
@@ -76,13 +86,6 @@ function sortItems<T>(
   return [...items].sort((left, right) => compareText(key(left), key(right)));
 }
 
-/**
- * Two different nothings.
- *
- * "No songs found" covered both an empty library and a filter that matched nothing, which are
- * different problems with different fixes — one needs saving something, the other needs the
- * filter cleared. Saying which, and offering the way out, is the whole job of this.
- */
 function EmptyState({
   noun,
   query,
@@ -110,39 +113,32 @@ function EmptyState({
   );
 }
 
-/**
- * Your library, browsable as a whole.
- *
- * The sidebar only ever led to one playlist or album at a time; there was no way to see
- * everything you have. Artists are derived rather than fetched — the library snapshot has no
- * artist list, but every saved album and liked song names one, and that union is the set of
- * artists you actually own something by.
- */
 export function LibraryPage({
   libraryState,
+  libraryController,
   playerController,
   onOpenAlbum,
   onOpenArtist,
   onOpenPlaylist,
+  initialTab = "liked",
 }: {
   libraryState: LibraryState;
+  libraryController?: LibraryController;
   playerController: PlayerControllerActions;
   onOpenAlbum: (album: Album) => void;
   onOpenArtist: (artist: Artist) => void;
   onOpenPlaylist: (playlist: Playlist) => void;
+  initialTab?: LibraryTab;
 }) {
-  const [tab, setTab] = useState<LibraryTab>("songs");
+  const [tab, setTab] = useState<LibraryTab>(initialTab);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<LibrarySort>("recent");
   const { currentTrackId, isPlaying } = useNowPlaying();
   const { openTrackMenu, openPlaylistPicker } = useTrackContextMenu();
   const { openPlaylistMenu, openAlbumMenu } = usePlaylistContextMenu();
+  const offline = useOfflineState();
+  const autoDownloadLiked = useAutoDownloadLikedEnabled();
 
-  /*
-   * Subscribed, not read once. `getLocalPlaylistItems()` was called inside the playlists memo
-   * whose deps never mentioned it, so creating, renaming, deleting or re-covering a local
-   * playlist left this page showing the old list until something unrelated re-rendered it.
-   */
   const localPlaylists = useSyncExternalStore(
     subscribeToLocalPlaylists,
     getLocalPlaylistItems,
@@ -152,40 +148,59 @@ export function LibraryPage({
   const library = libraryState.library;
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const isFiltering = normalizedQuery.length > 0;
-  // Artists have no second field to sort on, so that option is hidden there rather than
-  // silently doing nothing when the tab changes under a chosen sort.
-  const activeSort: LibrarySort = tab === "artists" && sort === "artist" ? "title" : sort;
+  const activeSort: LibrarySort = sort;
 
-  // Liked Songs first, then everything else saved to the library — two lists on YouTube's
-  // side, one "Songs" tab here.
-  // Deduped: a song that is both liked and saved to the library appears in both lists, and
-  // listing it twice also broke row keys and multi-select, which address a track by id.
-  const allSongs = useMemo(() => {
-    const byId = new Map<string, Track>();
-    for (const track of [...(library?.likedSongs ?? []), ...(library?.librarySongs ?? [])]) {
-      if (!byId.has(track.id)) byId.set(track.id, track);
-    }
-    return [...byId.values()];
-  }, [library?.likedSongs, library?.librarySongs]);
+  // Liked songs from the account in full
+  const allLikedSongs = useMemo(() => {
+    return library?.likedSongs ?? [];
+  }, [library?.likedSongs]);
 
-  const songs = useMemo(
-    () => sortItems(
-      allSongs.filter((track) => matches(normalizedQuery, track.title, track.artist, track.album)),
-      activeSort,
-      (track) => track.title,
-      (track) => track.artist,
-    ),
-    [activeSort, allSongs, normalizedQuery],
+  const likedSongs = useMemo(
+    () =>
+      sortItems(
+        allLikedSongs.filter((track) =>
+          matches(normalizedQuery, track.title, track.artist, track.album),
+        ),
+        activeSort,
+        (track) => track.title,
+        (track) => track.artist,
+      ),
+    [activeSort, allLikedSongs, normalizedQuery],
+  );
+
+  const downloadedLikedCount = useMemo(() => {
+    return allLikedSongs.filter((track) => Boolean(offline.entries[track.id])).length;
+  }, [allLikedSongs, offline.entries]);
+
+  const unDownloadedLikedCount = Math.max(0, allLikedSongs.length - downloadedLikedCount);
+
+  // Download all liked songs (both old and new)
+  const handleDownloadAllLiked = useCallback(() => {
+    if (allLikedSongs.length === 0) return;
+    queueDownloads(allLikedSongs);
+  }, [allLikedSongs]);
+
+  // Toggle auto-download liked songs; if turned on, instantly trigger downloading old liked songs too!
+  const handleToggleAutoDownloadLiked = useCallback(
+    (enabled: boolean) => {
+      setAutoDownloadLikedEnabled(enabled);
+      if (enabled && allLikedSongs.length > 0) {
+        queueDownloads(allLikedSongs);
+      }
+    },
+    [allLikedSongs],
   );
 
   const albums = useMemo(
-    () => sortItems(
-      (library?.albums ?? []).filter((album) =>
-        matches(normalizedQuery, album.title, album.artist)),
-      activeSort,
-      (album) => album.title,
-      (album) => album.artist,
-    ),
+    () =>
+      sortItems(
+        (library?.albums ?? []).filter((album) =>
+          matches(normalizedQuery, album.title, album.artist),
+        ),
+        activeSort,
+        (album) => album.title,
+        (album) => album.artist,
+      ),
     [activeSort, library?.albums, normalizedQuery],
   );
 
@@ -199,11 +214,6 @@ export function LibraryPage({
     );
   }, [activeSort, library?.playlists, localPlaylists, normalizedQuery]);
 
-  /*
-   * A display filter, not a second data source: `playlists` above stays the full sorted list,
-   * so a hidden playlist keeps its place in that order the moment "show hidden" reveals it
-   * again, rather than jumping to wherever it would fall in a filtered-then-reappended list.
-   */
   const hiddenPlaylistIds = useHiddenPlaylistIds();
   const hiddenPlaylistIdSet = useMemo(() => new Set(hiddenPlaylistIds), [hiddenPlaylistIds]);
   const [showHiddenPlaylists, setShowHiddenPlaylists] = useState(false);
@@ -214,101 +224,64 @@ export function LibraryPage({
   const hiddenPlaylistCount = playlists.length - visiblePlaylists.length;
   const displayedPlaylists = showHiddenPlaylists ? playlists : visiblePlaylists;
 
-  const allArtists = useMemo(() => {
-    const byId = new Map<string, Artist>();
-    /*
-     * The artist references carried by albums and tracks are a name and a channel id — no
-     * photo. The library's own artists section is the only place those come from, so it is
-     * consulted by id and by name for anything derived below.
-     */
-    const artworkByName = new Map(
-      (library?.artists ?? [])
-        .filter((artist) => artist.artworkUrl)
-        .map((artist) => [artist.name.trim().toLocaleLowerCase(), artist.artworkUrl] as const),
-    );
-    const remember = (reference: { id?: string; name?: string; artworkUrl?: string }) => {
-      const name = reference.name?.trim();
-      if (!name) return;
-      // Matching on name is for references that have no channel id at all. Applying it to one
-      // that does would hand an artist the photo of whoever shares their name.
-      const artworkUrl = reference.artworkUrl
-        ?? (reference.id ? undefined : artworkByName.get(name.toLocaleLowerCase()));
-      // Keyed by id where there is one, by name otherwise: an artist without an id still
-      // deserves a single row rather than one per track that mentions them.
-      const key = reference.id ?? `name:${name.toLocaleLowerCase()}`;
-      const existing = byId.get(key);
-      if (existing) {
-        if (!existing.artworkUrl && artworkUrl) existing.artworkUrl = artworkUrl;
-        return;
-      }
-      byId.set(key, { id: reference.id ?? key, name, artworkUrl });
-    };
-
-    for (const artist of library?.artists ?? []) remember(artist);
-    for (const album of library?.albums ?? []) {
-      if (album.artists?.length) album.artists.forEach((item) => remember(item));
-      // No album cover as a stand-in: it is a picture of a record, not of the artist, and one
-      // arbitrary sleeve in a round frame reads as the wrong person entirely.
-      else remember({ name: album.artist });
-    }
-    for (const track of [...(library?.likedSongs ?? []), ...(library?.librarySongs ?? [])]) {
-      if (track.artists?.length) track.artists.forEach((item) => remember(item));
-      else remember({ name: track.artist });
-    }
-
-    return [...byId.values()];
-  }, [library?.albums, library?.artists, library?.likedSongs, library?.librarySongs]);
-
-  const artists = useMemo(
-    () => sortItems(
-      allArtists.filter((artist) => matches(normalizedQuery, artist.name)),
-      activeSort,
-      (artist) => artist.name,
-      (artist) => artist.name,
-    ),
-    [activeSort, allArtists, normalizedQuery],
-  );
-
-  const selection = useTrackSelection(songs);
+  const selection = useTrackSelection(likedSongs);
   const tabsId = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  const selectTab = useCallback((next: LibraryTab) => {
-    setTab(next);
-    selection.clear();
-  }, [selection]);
+  const selectTab = useCallback(
+    (next: LibraryTab) => {
+      setTab(next);
+      setQuery("");
+      selection.clear();
+    },
+    [selection],
+  );
 
-  /** Arrow keys move within the tablist and wrap; Home and End jump to the ends. */
-  const onTabKeyDown = useCallback((event: ReactKeyboardEvent, index: number) => {
-    const last = TABS.length - 1;
-    const next = event.key === "ArrowRight"
-      ? (index === last ? 0 : index + 1)
-      : event.key === "ArrowLeft"
-        ? (index === 0 ? last : index - 1)
-        : event.key === "Home"
-          ? 0
-          : event.key === "End"
-            ? last
-            : -1;
-    if (next < 0) return;
-    event.preventDefault();
-    selectTab(TABS[next].value);
-    // Focus follows selection, which is what makes the roving tabindex reachable by keyboard.
-    tabRefs.current[next]?.focus();
-  }, [selectTab]);
+  const onTabKeyDown = useCallback(
+    (event: ReactKeyboardEvent, index: number) => {
+      const last = TABS.length - 1;
+      const next =
+        event.key === "ArrowRight"
+          ? index === last
+            ? 0
+            : index + 1
+          : event.key === "ArrowLeft"
+            ? index === 0
+              ? last
+              : index - 1
+            : event.key === "Home"
+              ? 0
+              : event.key === "End"
+                ? last
+                : -1;
+      if (next < 0) return;
+      event.preventDefault();
+      selectTab(TABS[next].value);
+      tabRefs.current[next]?.focus();
+    },
+    [selectTab],
+  );
 
-
-
-  const playSong = (track: Track, index: number, event: MouseEvent<HTMLElement>) => {
+  const playLikedSong = (track: Track, index: number, event: MouseEvent<HTMLElement>) => {
     if (selection.handleRowClick(event, index)) return;
-    void playerController.playTrackById(track.id, songs);
+    void playerController.playTrackById(track.id, likedSongs);
+  };
+
+  const playAllLikedSongs = (shuffle = false) => {
+    if (likedSongs.length === 0) return;
+    if (shuffle) {
+      const shuffled = [...likedSongs].sort(() => Math.random() - 0.5);
+      void playerController.playTrackById(shuffled[0].id, shuffled);
+    } else {
+      void playerController.playTrackById(likedSongs[0].id, likedSongs);
+    }
   };
 
   const counts: Record<LibraryTab, number> = {
-    songs: songs.length,
-    albums: albums.length,
-    artists: artists.length,
+    downloads: Object.keys(offline.entries).length,
+    liked: allLikedSongs.length,
     playlists: visiblePlaylists.length,
+    albums: albums.length,
   };
 
   if (!library) {
@@ -322,17 +295,15 @@ export function LibraryPage({
   }
 
   return (
-    <div className="flex flex-col gap-5 pb-44 md:pb-8">
+    <div className="flex flex-col gap-5 pb-44 md:pb-8 w-full max-w-full">
+      {/* ── Library Header ── */}
       <header className="flex flex-col gap-5 pb-1">
-        <h1 className="text-5xl font-bold tracking-[-0.03em] text-foreground">Library</h1>
+        <h1 className="text-4xl sm:text-5xl font-bold tracking-[-0.03em] text-foreground">
+          Library
+        </h1>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/*
-            One track with a sliding indicator rather than four loose pills: the group reads as a
-            single control, and the indicator carries the eye between sections instead of two
-            buttons swapping colour. Roving tabindex is kept — the animation is presentation,
-            the keyboard model is not.
-          */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Main 4 Library Options: Downloads, Liked Songs, Playlists, Albums */}
           <div
             className="flex shrink-0 gap-1 rounded-full bg-card/70 p-1 max-w-full overflow-x-auto no-scrollbar scroll-smooth"
             role="tablist"
@@ -355,9 +326,11 @@ export function LibraryPage({
                   onKeyDown={(event) => onTabKeyDown(event, index)}
                   onClick={() => selectTab(item.value)}
                   className={cn(
-                    "relative isolate rounded-full px-4 py-1.5 text-sm font-medium transition-colors whitespace-nowrap",
+                    "relative isolate rounded-full px-4 py-1.5 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    active ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                    active
+                      ? "text-primary-foreground font-semibold"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {active && (
@@ -368,184 +341,259 @@ export function LibraryPage({
                     />
                   )}
                   {item.label}
-                  <span className="ml-1.5 tabular-nums opacity-60">{counts[item.value]}</span>
+                  <span className="ml-1.5 tabular-nums opacity-60">({counts[item.value]})</span>
                 </button>
               );
             })}
           </div>
 
-          <div className="flex w-full sm:w-auto sm:ml-auto min-w-0 items-center justify-between sm:justify-end gap-2">
-            <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full bg-card/70 px-3.5 text-muted-foreground transition-colors focus-within:bg-card focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring sm:max-w-72">
-              <SearchIcon size={16} aria-hidden="true" className="shrink-0" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={`Filter ${tab}`}
-                aria-label="Filter library"
-                className="w-full min-w-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-              />
-              {isFiltering && (
-                <button
-                  type="button"
-                  onClick={() => setQuery("")}
-                  aria-label="Clear filter"
-                  className="shrink-0 rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <CloseIcon size={14} />
-                </button>
-              )}
-            </label>
-
-            <Select
-              className="w-auto shrink-0"
-              value={activeSort}
-              onValueChange={(value) => setSort(value as LibrarySort)}
-            >
-              <SelectTrigger className="h-10 rounded-full border border-white/10 bg-card/70 px-3.5 text-sm whitespace-nowrap gap-2 hover:bg-card" aria-label="Sort library">
-                <SelectValue className="truncate whitespace-nowrap" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="recent">Recently added</SelectItem>
-                <SelectItem value="title">{tab === "artists" ? "Name" : "Title"}</SelectItem>
-                {tab !== "artists" && (
-                  <SelectItem value="artist">{tab === "playlists" ? "Owner" : "Artist"}</SelectItem>
+          {/* Search & Sort Controls (Shown for Liked, Albums, Playlists tabs) */}
+          {tab !== "downloads" && (
+            <div className="flex w-full sm:w-auto sm:ml-auto min-w-0 items-center justify-between sm:justify-end gap-2">
+              <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full bg-card/70 px-3.5 text-muted-foreground transition-colors focus-within:bg-card focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring sm:max-w-72">
+                <SearchIcon size={16} aria-hidden="true" className="shrink-0" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={`Filter ${tab === "liked" ? "liked songs" : tab}`}
+                  aria-label="Filter library"
+                  className="w-full min-w-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                />
+                {isFiltering && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    aria-label="Clear filter"
+                    className="shrink-0 rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <CloseIcon size={14} />
+                  </button>
                 )}
-              </SelectContent>
-            </Select>
-          </div>
+              </label>
+
+              <Select
+                className="w-auto shrink-0"
+                value={activeSort}
+                onValueChange={(value) => setSort(value as LibrarySort)}
+              >
+                <SelectTrigger
+                  className="h-10 rounded-full border border-white/10 bg-card/70 px-3.5 text-sm whitespace-nowrap gap-2 hover:bg-card"
+                  aria-label="Sort library"
+                >
+                  <SelectValue className="truncate whitespace-nowrap" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recent">Recently added</SelectItem>
+                  <SelectItem value="title">Title</SelectItem>
+                  <SelectItem value="artist">
+                    {tab === "playlists" ? "Owner" : "Artist"}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </header>
 
+      {/* ── Main Content Area ── */}
       <div id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-tab-${tab}`}>
-      {tab === "songs" && (
-        songs.length === 0 ? (
-          <EmptyState noun="songs" query={query.trim()} onClearQuery={() => setQuery("")} />
-        ) : (
-          <div className="flex flex-col">
-            <div className="flex flex-col gap-0.5">
-            {songs.map((track, index) => (
-              <TrackRow
-                key={track.id}
-                track={track}
-                index={index}
-                showAlbum
-                hideIndex
-                isCurrent={currentTrackId === track.id}
-                isPlaying={isPlaying && currentTrackId === track.id}
-                isSelected={selection.isSelected(track.id)}
-                isSelectionActive={selection.isActive}
-                onToggleSelected={() => selection.toggle(track.id, index)}
-                onSelect={(event) => playSong(track, index, event)}
-                onContextMenu={(event) => openTrackMenu(event, track)}
-                onQuickAdd={() => openPlaylistPicker(track)}
-                onQuickAddToQueue={() => playerController.addToQueue(track)}
-                showDownload
+        {/* 1. DOWNLOADS OPTION */}
+        {tab === "downloads" && (
+          <DownloadsPage
+            playerController={playerController}
+            libraryController={libraryController}
+            libraryState={libraryState}
+            onOpenAlbum={onOpenAlbum}
+            onOpenArtist={onOpenArtist}
+            onOpenPlaylist={onOpenPlaylist}
+            embedded
+          />
+        )}
 
-                showRating
-              />
-            ))}
-            </div>
-          </div>
-        )
-      )}
-
-      {tab === "albums" && (
-        albums.length === 0 ? (
-          <EmptyState noun="albums" query={query.trim()} onClearQuery={() => setQuery("")} />
-        ) : (
-          <div className={GRID}>
-            {albums.map((album) => (
-              <AlbumCard
-                key={album.id}
-                artworkUrl={isLikedSongsId(album.id) ? likedSongsCover : album.artworkUrl}
-                title={album.title}
-                subtitle={album.artist}
-                onClick={() => onOpenAlbum(album)}
-                onContextMenu={(event) => openAlbumMenu(event, album)}
-              />
-            ))}
-          </div>
-        )
-      )}
-
-      {tab === "artists" && (
-        artists.length === 0 ? (
-          <EmptyState noun="artists" query={query.trim()} onClearQuery={() => setQuery("")} />
-        ) : (
-          <div className={GRID}>
-            {artists.map((artist) => (
-              <button
-                key={artist.id}
-                type="button"
-                onClick={() => onOpenArtist(artist)}
-                className="group/artist flex flex-col items-center gap-3 rounded-2xl bg-card/50 p-4 text-center transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <TrackArtwork
-                  className="size-20 sm:size-24 rounded-full transition-transform duration-200 group-hover/artist:scale-[1.04] shadow-sm"
-                  size={96}
-                  artworkUrl={artist.artworkUrl}
-                  iconSize={28}
-                  variant="artist"
-                />
-                <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="line-clamp-2 text-sm font-medium text-foreground">
-                    {artist.name}
-                  </span>
-                  <span className="text-xs text-muted-foreground">Artist</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        )
-      )}
-
-      {tab === "playlists" && (
-        playlists.length === 0 ? (
-          <EmptyState noun="playlists" query={query.trim()} onClearQuery={() => setQuery("")} />
-        ) : (
-          <div className="flex flex-col gap-3">
-            {hiddenPlaylistCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowHiddenPlaylists((current) => !current)}
-                className="flex w-fit items-center gap-1.5 rounded-full bg-card/70 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {showHiddenPlaylists ? <EyeClosedIcon size={14} /> : <EyeIcon size={14} />}
-                {showHiddenPlaylists ? "Hide the hidden playlists" : `Show ${hiddenPlaylistCount} hidden`}
-              </button>
-            )}
-            {displayedPlaylists.length === 0 ? (
-              <p className="px-2 py-16 text-center text-sm text-muted-foreground">
-                All your playlists are hidden.
-              </p>
-            ) : (
-              <div className={GRID}>
-                {displayedPlaylists.map((playlist) => (
-                  <div
-                    key={playlist.id}
-                    className={hiddenPlaylistIdSet.has(playlist.id) ? "opacity-40" : undefined}
-                  >
-                    <AlbumCard
-                      artworkUrl={
-                        isLikedSongsId(playlist.id, playlist.kind)
-                          ? likedSongsCover
-                          : playlist.artworkUrl
-                      }
-                      title={playlist.title}
-                      subtitle={playlist.owner}
-                      onClick={() => onOpenPlaylist(playlist)}
-                      onContextMenu={(event) => openPlaylistMenu(event, playlist)}
-                    />
+        {/* 2. LIKED SONGS OPTION */}
+        {tab === "liked" && (
+          <div className="flex flex-col gap-5">
+            {/* Action Bar for Liked Songs */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl bg-card/70 border border-border/40 p-4 sm:p-5 shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/15 text-primary shrink-0 shadow-inner">
+                  <HeartIcon size={22} fill="currentColor" />
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-bold text-foreground">Liked Songs</span>
+                    <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary tabular-nums">
+                      {allLikedSongs.length}
+                    </span>
                   </div>
-                ))}
+                  <span className="text-xs text-muted-foreground">
+                    All songs you have liked across your YouTube Music account.
+                  </span>
+                </div>
+              </div>
+
+              {/* Play / Shuffle / Download All / Auto-Download Toggle */}
+              <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-0">
+                {likedSongs.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => playAllLikedSongs(false)}
+                      className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-transform active:scale-95 hover:bg-primary/90"
+                    >
+                      <PlayActiveIcon size={14} />
+                      <span>Play All</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => playAllLikedSongs(true)}
+                      className="flex items-center gap-1.5 rounded-xl bg-card border border-border/50 px-3.5 py-2 text-xs font-semibold text-foreground transition-transform active:scale-95 hover:bg-muted"
+                      aria-label="Shuffle liked songs"
+                    >
+                      <ShuffleIcon size={14} />
+                      <span>Shuffle</span>
+                    </button>
+                  </>
+                )}
+
+                {/* Download All liked songs button */}
+                {unDownloadedLikedCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={handleDownloadAllLiked}
+                    className="flex items-center gap-1.5 rounded-xl bg-secondary/80 hover:bg-secondary px-3 py-2 text-xs font-semibold text-secondary-foreground transition-all active:scale-95"
+                    title="Download all liked songs to offline storage"
+                  >
+                    <DownloadIcon size={14} />
+                    <span>Download All ({unDownloadedLikedCount})</span>
+                  </button>
+                ) : allLikedSongs.length > 0 ? (
+                  <div className="flex items-center gap-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs font-medium text-emerald-400">
+                    <CheckIcon size={14} />
+                    <span>All downloaded</span>
+                  </div>
+                ) : null}
+
+                {/* Auto-download Liked Songs Toggle with live status */}
+                <button
+                  type="button"
+                  onClick={() => handleToggleAutoDownloadLiked(!autoDownloadLiked)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border transition-all active:scale-95 select-none",
+                    autoDownloadLiked
+                      ? "bg-primary/15 text-primary border-primary/30"
+                      : "bg-card text-muted-foreground border-border/50 hover:text-foreground",
+                  )}
+                  title="When enabled, automatically downloads all old and new liked songs to listen offline"
+                >
+                  <DownloadIcon size={14} />
+                  <span>Auto-download {autoDownloadLiked ? "ON" : "OFF"}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Song list */}
+            {likedSongs.length === 0 ? (
+              <EmptyState noun="liked songs" query={query.trim()} onClearQuery={() => setQuery("")} />
+            ) : (
+              <div className="flex flex-col">
+                <div className="flex flex-col gap-0.5">
+                  {likedSongs.map((track, index) => (
+                    <TrackRow
+                      key={track.id}
+                      track={track}
+                      index={index}
+                      showAlbum
+                      hideIndex
+                      isCurrent={currentTrackId === track.id}
+                      isPlaying={isPlaying && currentTrackId === track.id}
+                      isSelected={selection.isSelected(track.id)}
+                      isSelectionActive={selection.isActive}
+                      onToggleSelected={() => selection.toggle(track.id, index)}
+                      onSelect={(event) => playLikedSong(track, index, event)}
+                      onContextMenu={(event) => openTrackMenu(event, track)}
+                      onQuickAdd={() => openPlaylistPicker(track)}
+                      onQuickAddToQueue={() => playerController.addToQueue(track)}
+                      showDownload
+                      showRating
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </div>
-        )
-      )}
+        )}
 
+        {/* 3. PLAYLISTS OPTION */}
+        {tab === "playlists" && (
+          playlists.length === 0 ? (
+            <EmptyState noun="playlists" query={query.trim()} onClearQuery={() => setQuery("")} />
+          ) : (
+            <div className="flex flex-col gap-3">
+              {hiddenPlaylistCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowHiddenPlaylists((current) => !current)}
+                  className="flex w-fit items-center gap-1.5 rounded-full bg-card/70 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {showHiddenPlaylists ? <EyeClosedIcon size={14} /> : <EyeIcon size={14} />}
+                  {showHiddenPlaylists
+                    ? "Hide the hidden playlists"
+                    : `Show ${hiddenPlaylistCount} hidden`}
+                </button>
+              )}
+              {displayedPlaylists.length === 0 ? (
+                <p className="px-2 py-16 text-center text-sm text-muted-foreground">
+                  All your playlists are hidden.
+                </p>
+              ) : (
+                <div className={GRID}>
+                  {displayedPlaylists.map((playlist) => (
+                    <div
+                      key={playlist.id}
+                      className={hiddenPlaylistIdSet.has(playlist.id) ? "opacity-40" : undefined}
+                    >
+                      <AlbumCard
+                        artworkUrl={
+                          isLikedSongsId(playlist.id, playlist.kind)
+                            ? likedSongsCover
+                            : playlist.artworkUrl
+                        }
+                        title={playlist.title}
+                        subtitle={playlist.owner}
+                        onClick={() => onOpenPlaylist(playlist)}
+                        onContextMenu={(event) => openPlaylistMenu(event, playlist)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        )}
+
+        {/* 4. ALBUMS OPTION */}
+        {tab === "albums" && (
+          albums.length === 0 ? (
+            <EmptyState noun="albums" query={query.trim()} onClearQuery={() => setQuery("")} />
+          ) : (
+            <div className={GRID}>
+              {albums.map((album) => (
+                <AlbumCard
+                  key={album.id}
+                  artworkUrl={isLikedSongsId(album.id) ? likedSongsCover : album.artworkUrl}
+                  title={album.title}
+                  subtitle={album.artist}
+                  onClick={() => onOpenAlbum(album)}
+                  onContextMenu={(event) => openAlbumMenu(event, album)}
+                />
+              ))}
+            </div>
+          )
+        )}
       </div>
 
+      {/* Track Selection Bar */}
       <SelectionBar
         selection={selection}
         onAddToQueue={(tracks) => {
@@ -553,7 +601,6 @@ export function LibraryPage({
           selection.clear();
         }}
         onAddToPlaylist={(tracks) => {
-          // One picker for the whole selection, rather than one per track.
           openPlaylistPicker(tracks[0], tracks);
           selection.clear();
         }}

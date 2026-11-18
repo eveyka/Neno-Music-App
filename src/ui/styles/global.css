@@ -220,6 +220,27 @@ time,
   color: var(--color-foreground);
 }
 
+*,
+*::before,
+*::after {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+button,
+a,
+input,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+/* Fast touch response and 60/120fps smooth scrolling */
+[data-page-scroll-root] {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
 /* Native-feeling desktop defaults */
 body {
   overflow: hidden;

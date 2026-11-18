@@ -41,7 +41,7 @@ import {
   removeLocalPlaylistTrack,
   removeLocalTrackFromPlaylist,
 } from "./localPlaylists";
-import { queueDownload } from "./offlineStore";
+import { queueDownload, queueDownloads } from "./offlineStore";
 import { readAutoDownloadLikedEnabled } from "../ui/settings/autoDownloadLiked";
 
 export type LibraryStatus = "restoring" | "signed-out" | "authorizing" | "loading" | "ready" | "error";
@@ -115,6 +115,7 @@ function isSignInCancellation(error: unknown): boolean {
 /** Local mirror of dislikes: YouTube stores the rating but exposes no list to read it back. */
 const DISLIKED_TRACKS_STORAGE_KEY = "neno:disliked-tracks-v1";
 const LEGACY_DISLIKED_TRACKS_STORAGE_KEY = "zuno:disliked-tracks-v1";
+const LIKED_TRACKS_STORAGE_KEY = "neno:liked-tracks-v1";
 
 function readDislikedTrackIds(): Set<string> {
   try {
@@ -123,6 +124,26 @@ function readDislikedTrackIds(): Set<string> {
     return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : []);
   } catch {
     return new Set();
+  }
+}
+
+function readLikedTrackIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(LIKED_TRACKS_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeLikedTrackIds(ids: Set<string>): void {
+  try {
+    const arr = Array.from(ids);
+    localStorage.setItem(LIKED_TRACKS_STORAGE_KEY, JSON.stringify(arr));
+    void setAppSetting(LIKED_TRACKS_STORAGE_KEY, arr);
+  } catch {
+    // Non-fatal
   }
 }
 
@@ -142,10 +163,25 @@ export class LibraryController {
   /** Which flow `setAuthStage` is reporting for; the two share every stage but the first. */
   private activeAuthFlow: AuthFlow = "sign-in";
   private dislikedTrackIds: Set<string> = readDislikedTrackIds();
+  private likedTrackIds: Set<string> = readLikedTrackIds();
   private sessionRecoveryPromise: Promise<void> | null = null;
   private lastSessionRecoveryAt = 0;
 
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly dataSource: DataSource) {
+    if (typeof window !== "undefined") {
+      window.addEventListener("auto-download-liked-change", () => {
+        if (readAutoDownloadLikedEnabled() && this.state.library?.likedSongs?.length) {
+          try {
+            queueDownloads(this.state.library.likedSongs);
+          } catch (error) {
+            logInternalWarn("LibraryController auto-download liked songs failed", {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      });
+    }
+  }
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
@@ -424,11 +460,11 @@ export class LibraryController {
     }
   }
 
-  getBrowsePage(target: BrowseTarget): Promise<BrowsePage> {
+  getBrowsePage(target: BrowseTarget, forceRefresh = false): Promise<BrowsePage> {
     if (!this.dataSource.getBrowsePage) {
       return Promise.resolve({ title: "", shelves: [] });
     }
-    return this.dataSource.getBrowsePage(target);
+    return this.dataSource.getBrowsePage(target, forceRefresh);
   }
 
   listAccounts(): Promise<AccountOption[]> {
@@ -566,12 +602,34 @@ export class LibraryController {
       error: null,
       sessionConfirmedAt: library.account ? (this.state.sessionConfirmedAt ?? Date.now()) : null,
     });
+
+    if (library.likedSongs?.length) {
+      this.likedTrackIds = new Set(library.likedSongs.map((track) => track.id));
+      writeLikedTrackIds(this.likedTrackIds);
+    }
+
     logInternalInfo("LibraryController.refresh success", {
       albumCount: library.albums.length,
       playlistCount: library.playlists.length,
       likedSongCount: library.likedSongs.length,
       recentTrackCount: library.recentlyPlayed.length,
     });
+
+    if (readAutoDownloadLikedEnabled() && library.likedSongs?.length > 0) {
+      try {
+        queueDownloads(library.likedSongs);
+      } catch (error) {
+        logInternalWarn("LibraryController.applyLibrary auto-download liked songs failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  downloadAllLikedSongs(): void {
+    if (this.state.library?.likedSongs?.length) {
+      queueDownloads(this.state.library.likedSongs);
+    }
   }
 
   private hasCompleteEnoughLibrary(library: LibrarySnapshot | null): boolean {
@@ -1077,7 +1135,7 @@ export class LibraryController {
   }
 
   isTrackLiked(trackId: string): boolean {
-    return this.state.library?.likedSongs.some((track) => track.id === trackId) ?? false;
+    return this.likedTrackIds.has(trackId);
   }
 
   async setTrackLiked(track: Track, liked: boolean): Promise<void> {
@@ -1117,6 +1175,7 @@ export class LibraryController {
 
     const previousLibrary = this.state.library;
     const previousDisliked = new Set(this.dislikedTrackIds);
+    const previousLiked = new Set(this.likedTrackIds);
     const pendingLikeTrackIds = new Set(this.state.pendingLikeTrackIds);
     pendingLikeTrackIds.add(track.id);
 
@@ -1127,6 +1186,13 @@ export class LibraryController {
     const likedSongs = rating === "like"
       ? [track, ...previousLibrary.likedSongs.filter((item) => item.id !== track.id)]
       : previousLibrary.likedSongs.filter((item) => item.id !== track.id);
+
+    if (rating === "like") {
+      this.likedTrackIds.add(track.id);
+    } else {
+      this.likedTrackIds.delete(track.id);
+    }
+    writeLikedTrackIds(this.likedTrackIds);
 
     if (rating === "dislike") this.dislikedTrackIds.add(track.id);
     else this.dislikedTrackIds.delete(track.id);
@@ -1150,7 +1216,9 @@ export class LibraryController {
     } catch (error) {
       this.setState({ library: previousLibrary });
       this.dislikedTrackIds = previousDisliked;
+      this.likedTrackIds = previousLiked;
       this.persistDislikedTrackIds();
+      writeLikedTrackIds(this.likedTrackIds);
       throw error;
     } finally {
       const nextPending = new Set(this.state.pendingLikeTrackIds);

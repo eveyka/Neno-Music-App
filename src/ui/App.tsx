@@ -39,6 +39,7 @@ const SpeedDialPage = lazy(() =>
 );
 const LyricsView = lazy(() => import("./pages/LyricsView").then((m) => ({ default: m.LyricsView })));
 import { SearchOverlay } from "./components/SearchOverlay";
+import { FloatingTrackLoader } from "./components/player/FloatingTrackLoader";
 import { TrackContextMenuProvider } from "./components/TrackContextMenu";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { VolumeSyncBridge } from "./components/player/VolumeSyncBridge";
@@ -327,7 +328,6 @@ export default function App() {
   // OS media query alone, which is why this is the app's hook and not that one.
   const reduceMotion = useReduceMotion();
   const isMobile = useIsMobile();
-  const [isMobileNowPlayingOpen, setIsMobileNowPlayingOpen] = useState(false);
   // Sync player state to Android MediaPlaybackService (no-op on desktop/iOS)
   useAndroidMediaBridge();
   // Keep the WebView active during background playback to prevent OS timer suspension
@@ -695,18 +695,42 @@ export default function App() {
     activeTab?.searchQuery,
   ].filter(Boolean).join(":");
 
+  const lastHomeClickTimeRef = useRef<number>(0);
   const handleNavigateHome = () => {
     playerUIStore.setLyricsOpen(false);
+    const scrollRoot = document.querySelector("[data-page-scroll-root]");
+    if (activeTab?.view === "home") {
+      const now = Date.now();
+      const isDoubleClick = now - lastHomeClickTimeRef.current < 450;
+      lastHomeClickTimeRef.current = isDoubleClick ? 0 : now;
+
+      if (scrollRoot) {
+        scrollRoot.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      if (isDoubleClick) {
+        window.dispatchEvent(new CustomEvent("neno:refresh-home"));
+      }
+      return;
+    }
+
+    lastHomeClickTimeRef.current = Date.now();
     navigateTab(activeTabId, {
       title: activeTab?.title,
       view: "home",
     });
+    if (scrollRoot) {
+      scrollRoot.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
   const backHandlerRef = useRef<() => boolean>(() => false);
   backHandlerRef.current = () => {
-    if (isMobileNowPlayingOpen) {
-      setIsMobileNowPlayingOpen(false);
+    if (playerUIStore.getState().isMobileNowPlayingOpen) {
+      playerUIStore.setMobileNowPlayingOpen(false);
       return true;
     }
     if (playerUIState.isLyricsOpen) {
@@ -2252,6 +2276,7 @@ export default function App() {
             {activeTab?.view === "library" && (
               <LibraryPage
                 libraryState={libraryState}
+                libraryController={libraryController}
                 playerController={playerController}
                 onOpenAlbum={handleNavigateAlbum}
                 onOpenArtist={(artist) => handleNavigateArtist(artist)}
@@ -2320,7 +2345,7 @@ export default function App() {
           <>
             <div className="fixed bottom-0 inset-x-0 z-40 flex flex-col pointer-events-none">
               <div className="pointer-events-auto w-full px-2 pb-1.5">
-                <MobilePlayerBar onOpenNowPlaying={() => setIsMobileNowPlayingOpen(true)} />
+                <MobilePlayerBar onOpenNowPlaying={() => playerUIStore.setMobileNowPlayingOpen(true)} />
               </div>
               <div className="pointer-events-auto w-full">
                 <MobileBottomNav
@@ -2333,8 +2358,6 @@ export default function App() {
               </div>
             </div>
             <MobileNowPlayingModal
-              isOpen={isMobileNowPlayingOpen}
-              onClose={() => setIsMobileNowPlayingOpen(false)}
               onOpenArtist={(artist) => handleNavigateArtist(artist)}
             />
           </>
@@ -2359,6 +2382,7 @@ export default function App() {
           </div>
         )}
       </div>
+      <FloatingTrackLoader />
       <SearchOverlay
         isOpen={isSearchOpen && activeTab?.view !== "settings"}
         activeTabId={activeTabId}

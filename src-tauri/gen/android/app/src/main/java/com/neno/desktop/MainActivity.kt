@@ -46,7 +46,6 @@ class MainActivity : TauriActivity() {
     }
 
     var targetWebView: WebView? = null
-        private set
 
     /**
      * Background keepalive for the WebView's evaluateJavascript queue.
@@ -66,13 +65,13 @@ class MainActivity : TauriActivity() {
         override fun run() {
             try {
                 Rust.resume()
-                targetWebView?.let { wv ->
-                    wv.onResume()
-                    wv.resumeTimers()
-                    wv.evaluateJavascript(
-                        "if (typeof window.__neno_background_tick === 'function') { window.__neno_background_tick(); } else { void 0; }",
-                        null
-                    )
+                val wv = targetWebView ?: findWebView(window.decorView).also { if (it != null) targetWebView = it }
+                wv?.let {
+                    it.onResume()
+                    it.resumeTimers()
+                    val tickJs = "if (typeof window.__neno_background_tick === 'function') { window.__neno_background_tick(); } else { void 0; }"
+                    it.evaluateJavascript(tickJs, null)
+                    it.loadUrl("javascript:(function(){try{" + tickJs + "}catch(e){}})()")
                 }
             } catch (_: Throwable) {}
             backgroundKeepaliveHandler.postDelayed(this, 1000)
@@ -169,8 +168,9 @@ class MainActivity : TauriActivity() {
     override fun onPause() {
         super.onPause()
         // Counteract WryActivity calling webView.onPause() which stops media and JS
-        targetWebView?.onResume()
-        targetWebView?.resumeTimers()
+        val wv = targetWebView ?: findWebView(window.decorView).also { if (it != null) targetWebView = it }
+        wv?.onResume()
+        wv?.resumeTimers()
         try {
             Rust.resume()
         } catch (_: Throwable) {}
@@ -182,8 +182,9 @@ class MainActivity : TauriActivity() {
     override fun onStop() {
         super.onStop()
         // Keep webview media playback engine active when screen locks or app minimizes
-        targetWebView?.onResume()
-        targetWebView?.resumeTimers()
+        val wv = targetWebView ?: findWebView(window.decorView).also { if (it != null) targetWebView = it }
+        wv?.onResume()
+        wv?.resumeTimers()
         try {
             Rust.start()
             Rust.resume()
@@ -254,7 +255,7 @@ class MainActivity : TauriActivity() {
         }
     }
 
-    private fun findWebView(view: View): WebView? {
+    fun findWebView(view: View): WebView? {
         if (view is WebView) return view
         if (view is ViewGroup) {
             for (i in 0 until view.childCount) {
@@ -267,14 +268,15 @@ class MainActivity : TauriActivity() {
 
     fun dispatchMediaControl(command: String) {
         runOnUiThread {
-            val wv = targetWebView ?: findWebView(window.decorView)
+            val wv = targetWebView ?: findWebView(window.decorView).also { if (it != null) targetWebView = it }
             wv?.let {
                 try {
+                    it.onResume()
                     it.resumeTimers()
-                    it.evaluateJavascript(
-                        "if (window.__neno_media_command) { window.__neno_media_command('$command'); } else if (window.__zuno_media_command) { window.__zuno_media_command('$command'); } else { window.dispatchEvent(new CustomEvent('com.neno.desktop.MEDIA_CONTROL', { detail: { command: '$command' } })); }",
-                        null
-                    )
+                    val escapedCommand = command.replace("'", "\\'")
+                    val js = "if (window.__neno_media_command) { window.__neno_media_command('$escapedCommand'); } else if (window.__zuno_media_command) { window.__zuno_media_command('$escapedCommand'); } else { window.dispatchEvent(new CustomEvent('com.neno.desktop.MEDIA_CONTROL', { detail: { command: '$escapedCommand' } })); }"
+                    it.evaluateJavascript(js, null)
+                    it.loadUrl("javascript:(function(){try{" + js + "}catch(e){}})()")
                 } catch (e: Throwable) {
                     e.printStackTrace()
                 }

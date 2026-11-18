@@ -301,6 +301,27 @@ impl NativeAudio {
         Self { sender: Mutex::new(None), app, pending_device: Mutex::new(None) }
     }
 
+    fn spawn_thread(&self, slot: &mut Option<Sender<Command>>) -> Result<Sender<Command>, String> {
+        let (tx, rx) = mpsc::channel();
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let app = self.app.clone();
+        let device = self
+            .pending_device
+            .lock()
+            .map_err(|_| "native audio lock poisoned".to_string())?
+            .clone();
+        std::thread::Builder::new()
+            .name("neno-audio".into())
+            .spawn(move || run(app, rx, ready_tx, device))
+            .map_err(|error| format!("audio thread failed to start: {error}"))?;
+
+        ready_rx
+            .recv()
+            .map_err(|_| "audio thread stopped before it was ready".to_string())??;
+        *slot = Some(tx.clone());
+        Ok(tx)
+    }
+
     /**
      * Starts the audio thread on first use.
      *
@@ -314,30 +335,22 @@ impl NativeAudio {
             .lock()
             .map_err(|_| "native audio lock poisoned".to_string())?;
 
-        if slot.is_none() {
-            let (tx, rx) = mpsc::channel();
-            let (ready_tx, ready_rx) = mpsc::channel();
-            let app = self.app.clone();
-            let device = self
-                .pending_device
-                .lock()
-                .map_err(|_| "native audio lock poisoned".to_string())?
-                .clone();
-            std::thread::Builder::new()
-                .name("neno-audio".into())
-                .spawn(move || run(app, rx, ready_tx, device))
-                .map_err(|error| format!("audio thread failed to start: {error}"))?;
+        let sender = match slot.as_ref() {
+            Some(s) => s.clone(),
+            None => self.spawn_thread(&mut slot)?,
+        };
 
-            ready_rx
-                .recv()
-                .map_err(|_| "audio thread stopped before it was ready".to_string())??;
-            *slot = Some(tx);
+        match sender.send(command) {
+            Ok(()) => Ok(()),
+            Err(mpsc::SendError(retry_cmd)) => {
+                // Audio thread has terminated or panicked. Re-spawn and retry once.
+                *slot = None;
+                let fresh = self.spawn_thread(&mut slot)?;
+                fresh
+                    .send(retry_cmd)
+                    .map_err(|_| "audio thread is gone".to_string())
+            }
         }
-
-        slot.as_ref()
-            .expect("sender was just installed")
-            .send(command)
-            .map_err(|_| "audio thread is gone".to_string())
     }
 
     /**
@@ -349,24 +362,37 @@ impl NativeAudio {
      * hot-swaps the live stream instead.
      */
     pub(crate) fn set_output_device(&self, id: Option<String>) -> Result<(), String> {
-        let sender = self
-            .sender
-            .lock()
-            .map_err(|_| "native audio lock poisoned".to_string())?
-            .clone();
-
-        let Some(sender) = sender else {
-            *self
-                .pending_device
+        let sender = {
+            let slot = self
+                .sender
                 .lock()
-                .map_err(|_| "native audio lock poisoned".to_string())? = id;
-            return Ok(());
+                .map_err(|_| "native audio lock poisoned".to_string())?;
+
+            let Some(sender) = slot.as_ref().cloned() else {
+                *self
+                    .pending_device
+                    .lock()
+                    .map_err(|_| "native audio lock poisoned".to_string())? = id;
+                return Ok(());
+            };
+            sender
         };
 
         let (tx, rx) = mpsc::channel();
-        sender
-            .send(Command::SetOutputDevice { id, reply: tx })
-            .map_err(|_| "audio thread is gone".to_string())?;
+        if sender.send(Command::SetOutputDevice { id: id.clone(), reply: tx }).is_err() {
+            // Audio thread has died; re-spawn and retry
+            let mut slot = self
+                .sender
+                .lock()
+                .map_err(|_| "native audio lock poisoned".to_string())?;
+            *slot = None;
+            let fresh = self.spawn_thread(&mut slot)?;
+            let (tx2, rx2) = mpsc::channel();
+            fresh
+                .send(Command::SetOutputDevice { id, reply: tx2 })
+                .map_err(|_| "audio thread is gone".to_string())?;
+            return rx2.recv().map_err(|_| "audio thread dropped the request".to_string())?;
+        }
         rx.recv().map_err(|_| "audio thread dropped the request".to_string())?
     }
 }
@@ -573,22 +599,40 @@ fn our_sink_input_id() -> Option<u64> {
  * stored preference from weeks ago turning into silence the user has to notice and go fix in
  * settings, which is a worse failure than picking a device for them.
  */
+fn open_default_sink_with_retry() -> Result<MixerDeviceSink, String> {
+    let mut last_err = String::new();
+    // Up to 4 attempts: 0ms, 150ms, 300ms, 450ms total delay = ~900ms window
+    // This allows Android / OS audio routing to finish transitioning (e.g. bluetooth disconnect/connect, call ends)
+    for attempt in 0..4 {
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            DeviceSinkBuilder::open_default_sink()
+        }));
+        match res {
+            Ok(Ok(stream)) => return Ok(stream),
+            Ok(Err(error)) => {
+                last_err = format!("{error}");
+            }
+            Err(_) => {
+                last_err = "audio hardware initialization panicked".to_string();
+            }
+        }
+        if attempt < 3 {
+            std::thread::sleep(std::time::Duration::from_millis(150 * (attempt as u64 + 1)));
+        }
+    }
+    Err(format!("no audio output device: {last_err}"))
+}
+
 fn open_device_sink(id: Option<&str>) -> Result<MixerDeviceSink, String> {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
         let _ = id;
-        return match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            DeviceSinkBuilder::open_default_sink()
-        })) {
-            Ok(Ok(stream)) => Ok(stream),
-            Ok(Err(error)) => Err(format!("no audio output device: {error}")),
-            Err(_) => Err("audio hardware initialization failed or panicked".to_string()),
-        };
+        return open_default_sink_with_retry();
     }
 
     #[cfg(target_os = "linux")]
     if let Some(sink_name) = id.and_then(|id| id.strip_prefix(PIPEWIRE_SINK_ID_PREFIX)) {
-        let stream = DeviceSinkBuilder::open_default_sink()
+        let stream = open_default_sink_with_retry()
             .map_err(|error| format!("no audio output device: {error}"))?;
         move_our_stream_to_pipewire_sink(sink_name);
         return Ok(stream);
@@ -606,11 +650,22 @@ fn open_device_sink(id: Option<&str>) -> Result<MixerDeviceSink, String> {
     });
 
     match device {
-        Some(device) => DeviceSinkBuilder::from_device(device)
-            .and_then(DeviceSinkBuilder::open_stream)
-            .map_err(|error| format!("failed to open audio output device: {error}")),
-        None => DeviceSinkBuilder::open_default_sink()
-            .map_err(|error| format!("no audio output device: {error}")),
+        Some(device) => {
+            let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                DeviceSinkBuilder::from_device(device).and_then(DeviceSinkBuilder::open_stream)
+            }));
+            match res {
+                Ok(Ok(stream)) => Ok(stream),
+                Ok(Err(error)) => {
+                    eprintln!(
+                        "[internal][tauri][warn] failed to open requested device ({error}), falling back to default"
+                    );
+                    open_default_sink_with_retry()
+                }
+                Err(_) => open_default_sink_with_retry(),
+            }
+        }
+        None => open_default_sink_with_retry(),
     }
 }
 
@@ -673,7 +728,7 @@ fn run(
 
     let mut engine = Engine {
         app,
-        _stream: stream,
+        _stream: Some(stream),
         decks,
         active: 0,
         volume: 1.0,
@@ -716,7 +771,7 @@ fn run(
 struct Engine {
     app: AppHandle,
     /// Dropping this closes the output device, so it outlives every deck connected to it.
-    _stream: MixerDeviceSink,
+    _stream: Option<MixerDeviceSink>,
     decks: [Deck; 2],
     active: usize,
     volume: f32,
@@ -912,39 +967,46 @@ impl Engine {
                 self.decks[self.active].clear();
                 self.playing = false;
             }
-            Command::SetOutputDevice { id, reply } => match open_device_sink(id.as_deref()) {
-                Ok(stream) => {
-                    let decks = [
-                        Deck {
-                            sink: Player::connect_new(stream.mixer()),
-                            track_id: None,
-                            duration_sec: 0.0,
-                            health: None,
-                        },
-                        Deck {
-                            sink: Player::connect_new(stream.mixer()),
-                            track_id: None,
-                            duration_sec: 0.0,
-                            health: None,
-                        },
-                    ];
-                    for deck in &decks {
-                        deck.sink.pause();
+            Command::SetOutputDevice { id, reply } => {
+                // Cancel any in-progress crossfade
+                self.fade = None;
+                for deck in &mut self.decks {
+                    deck.clear();
+                }
+                // CRUCIAL: Explicitly drop the old stream FIRST so Android AAudio/AudioTrack releases
+                // the hardware output endpoint before we request a new one!
+                drop(self._stream.take());
+
+                match open_device_sink(id.as_deref()) {
+                    Ok(stream) => {
+                        let decks = [
+                            Deck {
+                                sink: Player::connect_new(stream.mixer()),
+                                track_id: None,
+                                duration_sec: 0.0,
+                                health: None,
+                            },
+                            Deck {
+                                sink: Player::connect_new(stream.mixer()),
+                                track_id: None,
+                                duration_sec: 0.0,
+                                health: None,
+                            },
+                        ];
+                        for deck in &decks {
+                            deck.sink.pause();
+                        }
+                        self._stream = Some(stream);
+                        self.decks = decks;
+                        self.active = 0;
+                        self.playing = false;
+                        let _ = reply.send(Ok(()));
                     }
-                    // Both old decks go with the old stream, so a fade referencing them would
-                    // be stale — dropped rather than settled through `cancel_fade`, which would
-                    // write a volume to a deck this is about to discard anyway.
-                    self.fade = None;
-                    self._stream = stream;
-                    self.decks = decks;
-                    self.active = 0;
-                    self.playing = false;
-                    let _ = reply.send(Ok(()));
+                    Err(error) => {
+                        let _ = reply.send(Err(error));
+                    }
                 }
-                Err(error) => {
-                    let _ = reply.send(Err(error));
-                }
-            },
+            }
         }
         false
     }

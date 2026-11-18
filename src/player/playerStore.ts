@@ -261,3 +261,15 @@ export function useLibrarySelector<T>(
 ): T {
   return useStoreSelector(subscribeToLibrary, getLibraryState, select, isEqual);
 }
+
+/**
+ * Reactive O(1) hook for track liked status.
+ * Updates immediately when trackId changes or when like status toggles, with zero latency.
+ */
+export function useTrackLiked(trackId: string | undefined): boolean {
+  return useSyncExternalStore(
+    subscribeToLibrary,
+    () => (trackId ? libraryController.isTrackLiked(trackId) : false),
+    () => (trackId ? libraryController.isTrackLiked(trackId) : false),
+  );
+}

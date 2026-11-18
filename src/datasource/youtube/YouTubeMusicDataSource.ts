@@ -55,7 +55,7 @@ import {
 } from "./lyricsSources";
 import { getPreferredLyricsSourceId } from "../../internal/lyricsSourcePreference";
 import { isVideoId, looksLikeYouTubeLink, parseYouTubeLink } from "./links";
-import { isTrackDownloaded } from "../../player/offlineStore";
+import { getOfflineTrack, isTrackDownloaded } from "../../player/offlineStore";
 import { isAndroid } from "../../ui/platform";
 import {
   getDownloadQuality,
@@ -1828,6 +1828,14 @@ export class YouTubeMusicDataSource extends DataSource {
       shelves.push(...(memo?.getType(...shelfTypes) ?? []) as Array<{ continuation?: unknown }>);
     }
     shelves.push((parsed as { continuation_contents?: { continuation?: unknown } }).continuation_contents ?? {});
+    const anyParsed = parsed as any;
+    const tabContent = anyParsed?.contents?.item?.()?.tabs?.find?.((t: any) => t?.selected)?.content;
+    if (tabContent?.continuation) {
+      shelves.push({ continuation: tabContent.continuation });
+    }
+    if (anyParsed?.continuation_contents?.continuation) {
+      shelves.push({ continuation: anyParsed.continuation_contents.continuation });
+    }
     const shelfContinuation = shelves
       .map((shelf) => shelf.continuation)
       .find((value) => typeof value === "string" && value.length > 0);
@@ -6103,7 +6111,7 @@ export class YouTubeMusicDataSource extends DataSource {
    * notice. Rather than model each surface separately, every shelf is walked with the same
    * collector the library uses and sorted into buckets by what came back.
    */
-  async getBrowsePage(target: BrowseTarget): Promise<BrowsePage> {
+  async getBrowsePage(target: BrowseTarget, forceRefresh = false): Promise<BrowsePage> {
     const surface = target;
     /* `params` is part of the key: mood categories all share one browseId, so keying on the
        id alone would serve the first mood opened for every mood thereafter. */
@@ -6115,10 +6123,12 @@ export class YouTubeMusicDataSource extends DataSource {
         ? `youtube-music:browse:home:v1`
         : `youtube-music:browse:v2:${surface}`
       : `youtube-music:browse:v2:id:${surface.browseId}:${surface.params ?? ""}`;
-    const cached = await getCachedJson<BrowsePage>(cacheKey);
-    if (cached?.shelves.length) {
-      void this.refreshBrowsePage(surface, cacheKey).catch(() => {});
-      return cached;
+    if (!forceRefresh) {
+      const cached = await getCachedJson<BrowsePage>(cacheKey);
+      if (cached?.shelves.length) {
+        void this.refreshBrowsePage(surface, cacheKey).catch(() => {});
+        return cached;
+      }
     }
     return this.refreshBrowsePage(surface, cacheKey);
   }
@@ -6162,21 +6172,44 @@ export class YouTubeMusicDataSource extends DataSource {
     }
 
     const sections = this.collectBrowseSections(response);
+    const allSections = [...sections];
+
+    if (surface === "home" || (typeof surface === "object" && surface.browseId === "FEmusic_home")) {
+      let currentPage: any = response;
+      for (let pageIdx = 0; pageIdx < 2; pageIdx++) {
+        const continuation = this.getMusicContinuation(client, currentPage);
+        if (!continuation) break;
+        try {
+          currentPage = await continuation.load();
+          if (currentPage) {
+            const nextSections = this.collectBrowseSections(currentPage);
+            allSections.push(...nextSections);
+          }
+        } catch (e) {
+          logInternalWarn("YouTubeMusicDataSource.refreshBrowsePage continuation failed", {
+            pageIdx,
+            error: e instanceof Error ? e.message : String(e),
+          });
+          break;
+        }
+      }
+    }
+
     logInternalInfo("YouTubeMusicDataSource.refreshBrowsePage response", {
       surface,
       browseId: usedBrowseId,
       responseKeys: response && typeof response === "object"
         ? Object.keys(response).slice(0, 25)
         : typeof response,
-      sectionCount: sections.length,
-      sectionTitles: sections.slice(0, 25).map((section) => section.title),
+      sectionCount: allSections.length,
+      sectionTitles: allSections.slice(0, 25).map((section) => section.title),
       totalItemsSeen: this.collectMusicItems(response, BROWSE_ITEM_TYPES).length,
     });
 
     const shelves: BrowseShelf[] = [];
     const seenTitles = new Set<string>();
 
-    for (const [index, section] of sections.entries()) {
+    for (const [index, section] of allSections.entries()) {
       const title = section.title?.trim() || `More ${index + 1}`;
       if (seenTitles.has(title)) continue;
 
@@ -6192,6 +6225,109 @@ export class YouTubeMusicDataSource extends DataSource {
 
       seenTitles.add(title);
       shelves.push(shelf);
+    }
+
+    // Ensure essential YouTube Music shelves ("From the community", "Mixed for you", "Covers and remixes", "Trending songs for you") are present on home surface
+    const isHomeSurface = surface === "home" || (typeof surface === "object" && surface.browseId === "FEmusic_home");
+    if (isHomeSurface) {
+      const hasCommunityShelf = shelves.some((s) => {
+        const t = s.title.toLowerCase();
+        return t.includes("community") || t.includes("कम्युनिटी");
+      });
+      const hasMixedShelf = shelves.some((s) => {
+        const t = s.title.toLowerCase();
+        return t.includes("mixed") || t.includes("mixes") || t.includes("मिक्स") || t.includes("supermix");
+      });
+      const hasCoversShelf = shelves.some((s) => {
+        const t = s.title.toLowerCase();
+        return t.includes("cover") || t.includes("remix") || t.includes("कवर") || t.includes("रीमिक्स");
+      });
+      const hasTrendingShelf = shelves.some((s) => {
+        const t = s.title.toLowerCase();
+        return t.includes("trending") || t.includes("trend") || t.includes("ट्रेंडिंग");
+      });
+
+      const fallbackSearches: Promise<void>[] = [];
+
+      if (!hasTrendingShelf) {
+        fallbackSearches.push((async () => {
+          try {
+            const res = await client.music.search("Trending songs", { type: "playlist" });
+            const node = (res as any)?.contents?.[0] ?? res;
+            if (node) {
+              const shelf = this.toBrowseShelf("Trending songs for you", (node as any).contents ?? node, []);
+              if (shelf.playlists.length > 0 || shelf.tracks.length > 0) {
+                shelves.push(shelf);
+              }
+            }
+          } catch (err) {
+            logInternalWarn("YouTubeMusicDataSource fallback trending search failed", {
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        })());
+      }
+
+      if (!hasMixedShelf) {
+        fallbackSearches.push((async () => {
+          try {
+            const res = await client.music.search("Mixed for you", { type: "playlist" });
+            const node = (res as any)?.contents?.[0] ?? res;
+            if (node) {
+              const shelf = this.toBrowseShelf("Mixed for you", (node as any).contents ?? node, []);
+              if (shelf.playlists.length > 0 || shelf.tracks.length > 0) {
+                shelves.push(shelf);
+              }
+            }
+          } catch (err) {
+            logInternalWarn("YouTubeMusicDataSource fallback mixed search failed", {
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        })());
+      }
+
+      if (!hasCommunityShelf) {
+        fallbackSearches.push((async () => {
+          try {
+            const res = await client.music.search("community playlist", { type: "playlist" });
+            const node = (res as any)?.contents?.[0] ?? res;
+            if (node) {
+              const shelf = this.toBrowseShelf("From the community", (node as any).contents ?? node, []);
+              if (shelf.playlists.length > 0) {
+                shelves.push(shelf);
+              }
+            }
+          } catch (err) {
+            logInternalWarn("YouTubeMusicDataSource fallback community search failed", {
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        })());
+      }
+
+      if (!hasCoversShelf) {
+        fallbackSearches.push((async () => {
+          try {
+            const res = await client.music.search("Covers and remixes", { type: "playlist" });
+            const node = (res as any)?.contents?.[0] ?? res;
+            if (node) {
+              const shelf = this.toBrowseShelf("Covers and remixes", (node as any).contents ?? node, []);
+              if (shelf.playlists.length > 0 || shelf.tracks.length > 0) {
+                shelves.push(shelf);
+              }
+            }
+          } catch (err) {
+            logInternalWarn("YouTubeMusicDataSource fallback covers search failed", {
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        })());
+      }
+
+      if (fallbackSearches.length > 0) {
+        await Promise.allSettled(fallbackSearches);
+      }
     }
 
     /*
@@ -6449,6 +6585,17 @@ export class YouTubeMusicDataSource extends DataSource {
       }
     }
 
+    const anyResp = response as any;
+    const directContinuationContents = anyResp?.continuation_contents?.contents || anyResp?.continuation_contents?.items;
+    if (Array.isArray(directContinuationContents)) {
+      for (const shelf of directContinuationContents) {
+        sections.push({
+          title: readTitle(shelf.header?.title || shelf.title),
+          node: shelf.contents || shelf.items || shelf,
+        });
+      }
+    }
+
     return sections;
   }
 
@@ -6526,10 +6673,12 @@ export class YouTubeMusicDataSource extends DataSource {
      * view: both end up as a URL served by the local media server.
      */
     if (isTrackDownloaded(track.id)) {
+      const offlineTrack = getOfflineTrack(track.id);
+      const mimeType = offlineTrack?.mimeType ?? track.mimeType ?? "audio/mp4";
       try {
         const payload = await invoke<NativeAudioSourcePayload>("offline_audio_source", {
           trackId: track.id,
-          mimeType: track.mimeType ?? "audio/mp4",
+          mimeType,
         });
         logInternalInfo("YouTubeMusicDataSource.getNativeStreamData offline hit", {
           trackId: track.id,
@@ -6537,11 +6686,11 @@ export class YouTubeMusicDataSource extends DataSource {
         });
         return { mimeType: payload.mimeType, sourceUrl: payload.url };
       } catch (error) {
-        // The manifest and disk have drifted. Fall through to the network rather than fail.
         logInternalWarn("YouTubeMusicDataSource.getNativeStreamData offline miss", {
           trackId: track.id,
           error: error instanceof Error ? error.message : String(error),
         });
+        throw new Error("Downloaded audio file is missing or unreadable on disk.");
       }
     }
 
@@ -6598,13 +6747,26 @@ export class YouTubeMusicDataSource extends DataSource {
     }
 
     if (isTrackDownloaded(track.id)) {
-      const mimeType = track.mimeType ?? "audio/mp4";
-      /*
-       * The mime type travels with the id because it is what picks the decoder: a downloaded
-       * body is raw bytes on disk with no extension to read, and Opus needs libopus while
-       * everything else goes to rodio.
-       */
-      return { mimeType, rustSource: { kind: "offline", trackId: track.id, mimeType } };
+      const offlineTrack = getOfflineTrack(track.id);
+      const mimeType = offlineTrack?.mimeType ?? track.mimeType ?? "audio/mp4";
+      let sourceUrl: string | undefined;
+      try {
+        const payload = await invoke<NativeAudioSourcePayload>("offline_audio_source", {
+          trackId: track.id,
+          mimeType,
+        });
+        sourceUrl = payload.url;
+      } catch (err) {
+        logInternalWarn("YouTubeMusicDataSource.getRustStreamData offline_audio_source fallback failed", {
+          trackId: track.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      return {
+        mimeType,
+        sourceUrl,
+        rustSource: { kind: "offline", trackId: track.id, mimeType },
+      };
     }
 
     const { url, mimeType, cookie, contentLength } = await this.resolveStreamUrl(track);
@@ -6675,6 +6837,19 @@ export class YouTubeMusicDataSource extends DataSource {
         }
         default:
           break;
+      }
+    }
+
+    if (shelf.artists.length === 1) {
+      shelf.primaryArtist = shelf.artists[0];
+    } else if (shelf.artists.length === 0 && shelf.tracks.length > 0) {
+      const firstArtist = shelf.tracks[0]?.artist;
+      if (firstArtist && shelf.tracks.every((t) => t.artist === firstArtist)) {
+        shelf.primaryArtist = {
+          id: shelf.tracks[0].artists?.[0]?.id || `artist:${firstArtist}`,
+          name: firstArtist,
+          artworkUrl: shelf.tracks[0].artworkUrl,
+        };
       }
     }
 

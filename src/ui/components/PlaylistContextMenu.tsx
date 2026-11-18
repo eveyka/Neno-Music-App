@@ -16,6 +16,8 @@ import { isLocalPlaylist, LOCAL_IMAGE_PREFIX, setLocalPlaylistArtwork } from "..
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { forgetArtworkSource } from "../../internal/artworkCache";
 import { exportPlaylist } from "../../player/playlistTransfer";
+import { queueDownloads } from "../../player/offlineStore";
+import { recordDownloadedPlaylist } from "../../player/downloadedPlaylists";
 import { hidePlaylist, unhidePlaylist, useHiddenPlaylistIds } from "../settings/hiddenPlaylists";
 import { shareContent } from "../../internal/share";
 import {
@@ -165,15 +167,15 @@ export function PlaylistContextMenuProvider({
   // Liked Songs is a system list: it has no name of its own and cannot be removed.
   const canEditPlaylist = Boolean(
     playlist
-      && playlist.isEditable !== false
-      && playlist.kind !== "liked-songs"
-      && playlist.id !== "LM",
+    && playlist.isEditable !== false
+    && playlist.kind !== "liked-songs"
+    && playlist.id !== "LM",
   );
   const canCopyPlaylistUrl = Boolean(
     playlist
-      && !isLocalPlaylistMenu
-      && playlist.kind !== "liked-songs"
-      && playlist.id !== "LM",
+    && !isLocalPlaylistMenu
+    && playlist.kind !== "liked-songs"
+    && playlist.id !== "LM",
   );
 
   const getAlbumUrl = (album: Album): string => {
@@ -263,6 +265,30 @@ export function PlaylistContextMenuProvider({
       );
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Unable to export this playlist.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const downloadSelectedPlaylist = async () => {
+    const target = playlist;
+    if (!target) return;
+
+    setPosition(null);
+    setIsSaving(true);
+    showPersistentToast("Preparing download...");
+
+    try {
+      const tracks = await libraryController.getPlaylistTracks(target);
+      if (tracks.length > 0) {
+        recordDownloadedPlaylist(target, tracks);
+        queueDownloads(tracks);
+        showToast(`Queued ${tracks.length} songs for download`);
+      } else {
+        showToast("No tracks to download");
+      }
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Unable to download this playlist.");
     } finally {
       setIsSaving(false);
     }
@@ -387,146 +413,160 @@ export function PlaylistContextMenuProvider({
               </div>
             </div>
           ) : (
-          <>
-          {album && (
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              onClick={() => void shareAlbumUrl()}
-            >
-              <ShareIcon size={18} />
-              <span>Share album</span>
-            </button>
-          )}
-          {canCopyPlaylistUrl && (
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              onClick={() => void sharePlaylistUrl()}
-            >
-              <ShareIcon size={18} />
-              <span>Share playlist</span>
-            </button>
-          )}
-          {playlist && (
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              onClick={toggleHiddenPlaylist}
-            >
-              {isHiddenPlaylist ? <EyeIcon size={18} /> : <EyeClosedIcon size={18} />}
-              <span>{isHiddenPlaylist ? "Unhide from library" : "Hide from library"}</span>
-            </button>
-          )}
-          {canEditPlaylist && (
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              onClick={() => setRenameDraft(playlist?.title ?? "")}
-            >
-              <PencilIcon size={18} />
-              <span>Rename</span>
-            </button>
-          )}
-          {isLocalPlaylistMenu && (
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              onClick={() => void choosePlaylistImage()}
-            >
-              <ImageIcon size={18} />
-              <span>Change image</span>
-            </button>
-          )}
-          {isLocalPlaylistMenu && playlist?.artworkUrl?.startsWith(LOCAL_IMAGE_PREFIX) && (
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              onClick={() => void clearPlaylistImage()}
-            >
-              <ImageIcon size={18} />
-              <span>Use default image</span>
-            </button>
-          )}
-          {playlist && (
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              onClick={() => void exportSelectedPlaylist()}
-            >
-              <DownloadIcon size={18} />
-              <span>Export playlist</span>
-            </button>
-          )}
-          {canEditPlaylist && (
-            /* Two-step, in place: the second press is the confirmation, so a destructive
-               action never happens on one click and never costs a modal either. */
-            <button
-              type="button"
-              role="menuitem"
-              className={cn(
-                "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                confirmDelete
-                  ? "bg-destructive/10 text-destructive"
-                  : "text-foreground hover:bg-card",
+            <>
+              {album && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => void shareAlbumUrl()}
+                >
+                  <ShareIcon size={18} />
+                  <span>Share album</span>
+                </button>
               )}
-              onClick={() => {
-                if (confirmDelete) {
-                  void deleteSelectedPlaylist();
-                  return;
-                }
-                setConfirmDelete(true);
-              }}
-            >
-              <TrashIcon size={18} />
-              <span>
-                {confirmDelete
-                  ? "Tap again to delete"
-                  : isLocalPlaylistMenu
-                    ? "Delete local playlist"
-                    : "Delete playlist"}
-              </span>
-            </button>
-          )}
-          {album && (
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              onClick={() => void toggleAlbumSaved()}
-            >
-              {isSaved ? <BookmarkActiveIcon size={18} /> : <BookmarkIcon size={18} />}
-              <span>{isSaved ? "Remove from library" : "Save to library"}</span>
-            </button>
-          )}
-          </>
-          )}
-        </div>
+              {canCopyPlaylistUrl && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => void sharePlaylistUrl()}
+                >
+                  <ShareIcon size={18} />
+                  <span>Share playlist</span>
+                </button>
+              )}
+              {playlist && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={toggleHiddenPlaylist}
+                >
+                  {isHiddenPlaylist ? <EyeIcon size={18} /> : <EyeClosedIcon size={18} />}
+                  <span>{isHiddenPlaylist ? "Unhide from library" : "Hide from library"}</span>
+                </button>
+              )}
+              {canEditPlaylist && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => setRenameDraft(playlist?.title ?? "")}
+                >
+                  <PencilIcon size={18} />
+                  <span>Rename</span>
+                </button>
+              )}
+              {isLocalPlaylistMenu && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => void choosePlaylistImage()}
+                >
+                  <ImageIcon size={18} />
+                  <span>Change image</span>
+                </button>
+              )}
+              {isLocalPlaylistMenu && playlist?.artworkUrl?.startsWith(LOCAL_IMAGE_PREFIX) && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => void clearPlaylistImage()}
+                >
+                  <ImageIcon size={18} />
+                  <span>Use default image</span>
+                </button>
+              )}
+              {playlist && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => void downloadSelectedPlaylist()}
+                >
+                  <DownloadIcon size={18} />
+                  <span>Download playlist</span>
+                </button>
+              )}
+              {playlist && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => void exportSelectedPlaylist()}
+                >
+                  <DownloadIcon size={18} />
+                  <span>Export playlist</span>
+                </button>
+              )}
+              {canEditPlaylist && (
+                /* Two-step, in place: the second press is the confirmation, so a destructive
+                   action never happens on one click and never costs a modal either. */
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    confirmDelete
+                      ? "bg-destructive/10 text-destructive"
+                      : "text-foreground hover:bg-card",
+                  )}
+                  onClick={() => {
+                    if (confirmDelete) {
+                      void deleteSelectedPlaylist();
+                      return;
+                    }
+                    setConfirmDelete(true);
+                  }}
+                >
+                  <TrashIcon size={18} />
+                  <span>
+                    {confirmDelete
+                      ? "Tap again to delete"
+                      : isLocalPlaylistMenu
+                        ? "Delete local playlist"
+                        : "Delete playlist"}
+                  </span>
+                </button>
+              )}
+              {album && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-card disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => void toggleAlbumSaved()}
+                >
+                  {isSaved ? <BookmarkActiveIcon size={18} /> : <BookmarkIcon size={18} />}
+                  <span>{isSaved ? "Remove from library" : "Save to library"}</span>
+                </button>
+              )}
+        </>
       )}
-      {toast && (
-        <div
-          className="fixed top-14 sm:top-8 left-1/2 -translate-x-1/2 z-[250] flex items-center gap-2.5 rounded-full bg-neutral-900/95 dark:bg-zinc-950/95 px-4 py-2 text-sm font-medium text-white shadow-[0_16px_40px_rgba(0,0,0,0.7)] border border-white/15 backdrop-blur-2xl pointer-events-none select-none whitespace-nowrap animate-in fade-in slide-in-from-top-4 duration-200"
-          role="status"
-        >
-          {isSaving ? (
-            <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
-              <Loader variant="spinner" size={14} />
-            </div>
-          ) : (toast.startsWith("Saved ") || toast.startsWith("Removed ") || toast === "Url copied to clipboard" || toast === "Local playlist deleted") ? (
-            <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              <CheckIcon size={14} aria-hidden="true" />
-            </div>
-          ) : null}
-          <span className="text-xs sm:text-sm font-semibold tracking-wide text-white">{toast}</span>
+    </div>
+  )
+}
+{
+  toast && (
+    <div
+      className="fixed top-14 sm:top-8 left-1/2 -translate-x-1/2 z-[250] flex items-center gap-2.5 rounded-full bg-neutral-900/95 dark:bg-zinc-950/95 px-4 py-2 text-sm font-medium text-white shadow-[0_16px_40px_rgba(0,0,0,0.7)] border border-white/15 backdrop-blur-2xl pointer-events-none select-none whitespace-nowrap animate-in fade-in slide-in-from-top-4 duration-200"
+      role="status"
+    >
+      {isSaving ? (
+        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
+          <Loader variant="spinner" size={14} />
         </div>
-      )}
-    </PlaylistContext.Provider>
+      ) : (toast.startsWith("Saved ") || toast.startsWith("Removed ") || toast === "Url copied to clipboard" || toast === "Local playlist deleted") ? (
+        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+          <CheckIcon size={14} aria-hidden="true" />
+        </div>
+      ) : null}
+      <span className="text-xs sm:text-sm font-semibold tracking-wide text-white">{toast}</span>
+    </div>
+  )
+}
+    </PlaylistContext.Provider >
   );
 }

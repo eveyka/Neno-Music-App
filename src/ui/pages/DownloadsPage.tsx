@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import {
@@ -11,19 +11,27 @@ import {
   TrashIcon,
 } from "@/ui/icons";
 import type { Album, Artist, Playlist, Track } from "../../datasource/types";
-import type { LibraryController } from "../../player/LibraryController";
+import type { LibraryController, LibraryState } from "../../player/LibraryController";
 import type { PlayerControllerActions } from "../../player/playerStore";
 import {
   cancelDownload,
   DEFAULT_OFFLINE_MAX_BYTES,
   getOfflineMaxBytes,
+  queueDownloads,
   removeAllDownloads,
   useOfflineState,
 } from "../../player/offlineStore";
+import { useDownloadedPlaylists } from "../../player/downloadedPlaylists";
+import { getLocalPlaylistItems, subscribeToLocalPlaylists } from "../../player/localPlaylists";
 import { TrackRow } from "../components/TrackRow";
 import { TrackArtwork } from "../components/TrackArtwork";
+import { AlbumCard } from "../components/AlbumCard";
+import { SelectionBar } from "../components/SelectionBar";
 import { useTrackContextMenu } from "../components/TrackContextMenu";
+import { usePlaylistContextMenu } from "../components/PlaylistContextMenu";
 import { useNowPlaying } from "../hooks/useNowPlaying";
+import { useTrackSelection } from "../hooks/useTrackSelection";
+import { isLikedSongsId, likedSongsCover } from "../likedSongsArtwork";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 ** 2) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -31,30 +39,41 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
+const GRID = "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:[grid-template-columns:repeat(auto-fill,minmax(11rem,1fr))] lg:gap-5";
+
+type DownloadsSubTab = "songs" | "playlists";
+
 interface DownloadsPageProps {
   playerController: PlayerControllerActions;
-  libraryController: LibraryController;
+  libraryController?: LibraryController;
+  libraryState?: LibraryState;
   onOpenAlbum?: (album: Album) => void;
   onOpenArtist?: (artist: Artist) => void;
   onOpenPlaylist?: (playlist: Playlist) => void;
   onOpenBrowse?: () => void;
+  embedded?: boolean;
 }
 
 export function DownloadsPage({
   playerController,
-  libraryController: _libraryController,
+  libraryController,
+  libraryState,
   onOpenAlbum: _onOpenAlbum,
   onOpenArtist: _onOpenArtist,
-  onOpenPlaylist: _onOpenPlaylist,
+  onOpenPlaylist,
   onOpenBrowse,
+  embedded = false,
 }: DownloadsPageProps) {
   const offline = useOfflineState();
   const maxBytes = getOfflineMaxBytes() || DEFAULT_OFFLINE_MAX_BYTES;
+  const [subTab, setSubTab] = useState<DownloadsSubTab>("songs");
   const [query, setQuery] = useState("");
   const [confirmRemoveAll, setConfirmRemoveAll] = useState(false);
   const { currentTrackId, isPlaying } = useNowPlaying();
   const { openTrackMenu, openPlaylistPicker } = useTrackContextMenu();
+  const { openPlaylistMenu } = usePlaylistContextMenu();
 
+  // All downloaded songs in offline store (includes individual, album, playlist, and liked downloads)
   const downloads = useMemo(
     () =>
       Object.values(offline.entries).sort(
@@ -62,6 +81,8 @@ export function DownloadsPage({
       ),
     [offline.entries],
   );
+
+  const downloadedTracks = useMemo(() => downloads.map((e) => e.track), [downloads]);
 
   const inFlight = useMemo(() => {
     const ids = [
@@ -73,6 +94,89 @@ export function DownloadsPage({
       .filter((track): track is NonNullable<typeof track> => Boolean(track));
   }, [offline.downloadingId, offline.pending, offline.queued]);
 
+  const registeredPlaylists = useDownloadedPlaylists();
+  const localPlaylists = useSyncExternalStore(
+    subscribeToLocalPlaylists,
+    getLocalPlaylistItems,
+    getLocalPlaylistItems,
+  );
+
+  // Derive downloaded playlists: registered ones + local ones + liked songs (if downloaded tracks exist)
+  const downloadedPlaylists = useMemo(() => {
+    const result: Array<{ playlist: Playlist; downloadedCount: number }> = [];
+    const seenIds = new Set<string>();
+
+    // 1. Liked Songs playlist if any liked songs are in offline store
+    const currentLibrary = libraryState?.library ?? libraryController?.getState().library;
+    const likedSongs = currentLibrary?.likedSongs ?? [];
+    const downloadedLikedCount = likedSongs.filter((t) => Boolean(offline.entries[t.id])).length;
+    if (downloadedLikedCount > 0) {
+      seenIds.add("liked-songs");
+      seenIds.add(currentLibrary?.likedSongsPlaylist?.id ?? "LM");
+      result.push({
+        playlist: {
+          id: currentLibrary?.likedSongsPlaylist?.id ?? "LM",
+          title: "Liked Songs",
+          owner: "YouTube Music",
+          artworkUrl: likedSongsCover,
+          kind: "liked-songs",
+        },
+        downloadedCount: downloadedLikedCount,
+      });
+    }
+
+    // 2. Playlists explicitly downloaded and registered
+    for (const item of registeredPlaylists) {
+      if (seenIds.has(item.id)) continue;
+      const count = item.trackIds.filter((id) => Boolean(offline.entries[id])).length;
+      if (count > 0 || item.trackIds.length === 0) {
+        seenIds.add(item.id);
+        result.push({
+          playlist: {
+            id: item.id,
+            title: item.title,
+            owner: item.owner || "Downloaded Playlist",
+            artworkUrl: item.artworkUrl,
+            kind: (item.kind === "local" || item.kind === "liked-songs" ? item.kind : "playlist"),
+          },
+          downloadedCount: count,
+        });
+      }
+    }
+
+    // 3. Any library playlists that have tracks in offline storage
+    for (const pl of currentLibrary?.playlists ?? []) {
+      if (seenIds.has(pl.id)) continue;
+      // If any registered playlist or matching cached playlist
+      const match = registeredPlaylists.find((r) => r.id === pl.id);
+      if (match) {
+        const count = match.trackIds.filter((id) => Boolean(offline.entries[id])).length;
+        if (count > 0) {
+          seenIds.add(pl.id);
+          result.push({ playlist: pl, downloadedCount: count });
+        }
+      }
+    }
+
+    // 4. Local playlists (audio files located locally)
+    for (const lp of localPlaylists) {
+      if (seenIds.has(lp.id)) continue;
+      seenIds.add(lp.id);
+      result.push({
+        playlist: lp,
+        downloadedCount: lp.localPaths?.length ?? 0,
+      });
+    }
+
+    return result;
+  }, [
+    libraryState?.library,
+    libraryController,
+    offline.entries,
+    registeredPlaylists,
+    localPlaylists,
+  ]);
+
   const filteredDownloads = useMemo(() => {
     if (!query.trim()) return downloads;
     const lower = query.trim().toLowerCase();
@@ -83,6 +187,18 @@ export function DownloadsPage({
         entry.track.album?.toLowerCase().includes(lower),
     );
   }, [downloads, query]);
+
+  const filteredPlaylists = useMemo(() => {
+    if (!query.trim()) return downloadedPlaylists;
+    const lower = query.trim().toLowerCase();
+    return downloadedPlaylists.filter(
+      (item) =>
+        item.playlist.title.toLowerCase().includes(lower) ||
+        item.playlist.owner?.toLowerCase().includes(lower),
+    );
+  }, [downloadedPlaylists, query]);
+
+  const selection = useTrackSelection(downloadedTracks);
 
   const usedPercent = Math.min(100, Math.round((offline.usedBytes / maxBytes) * 100));
 
@@ -97,32 +213,35 @@ export function DownloadsPage({
     }
   };
 
-  const playTrack = (track: Track) => {
+  const playTrack = (track: Track, index: number, event: React.MouseEvent<HTMLElement>) => {
+    if (selection.handleRowClick(event, index)) return;
     const allTracks = downloads.map((item) => item.track);
     void playerController.playTrackById(track.id, allTracks.length > 0 ? allTracks : [track]);
   };
 
   return (
     <div className="flex flex-col gap-6 pb-40 md:pb-12 w-full max-w-full">
-      {/* ── Systematic Page Header ── */}
-      <header className="flex flex-col gap-1.5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
-            <DownloadIcon size={20} aria-hidden="true" />
+      {/* ── Standalone Page Header (hidden when embedded in LibraryPage) ── */}
+      {!embedded && (
+        <header className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
+              <DownloadIcon size={20} aria-hidden="true" />
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+              Downloads
+            </h1>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            Downloads
-          </h1>
-        </div>
-        <p className="text-xs sm:text-sm text-muted-foreground pl-0.5">
-          Offline library · {downloads.length} {downloads.length === 1 ? "song" : "songs"} ·{" "}
-          {formatBytes(offline.usedBytes)} used
-          {inFlight.length > 0 ? ` · ${inFlight.length} in progress` : ""}
-        </p>
-      </header>
+          <p className="text-xs sm:text-sm text-muted-foreground pl-0.5">
+            Offline library · {downloads.length} {downloads.length === 1 ? "song" : "songs"} ·{" "}
+            {formatBytes(offline.usedBytes)} used
+            {inFlight.length > 0 ? ` · ${inFlight.length} in progress` : ""}
+          </p>
+        </header>
+      )}
 
       {/* ── Empty State ── */}
-      {downloads.length === 0 && inFlight.length === 0 ? (
+      {downloads.length === 0 && inFlight.length === 0 && downloadedPlaylists.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-4 py-16 px-4 text-center">
           <div className="flex size-20 items-center justify-center rounded-3xl bg-card border border-border/50 text-primary shadow-sm">
             <DownloadIcon size={38} aria-hidden="true" />
@@ -130,8 +249,7 @@ export function DownloadsPage({
           <div className="flex flex-col gap-1.5 max-w-sm">
             <h2 className="text-lg font-bold text-foreground">No downloaded music</h2>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Download your favorite tracks and albums to listen offline anytime, anywhere, with zero
-              data usage.
+              Download your favorite tracks, playlists, and albums to listen offline anytime, anywhere, with zero data usage.
             </p>
           </div>
           {onOpenBrowse && (
@@ -147,9 +265,8 @@ export function DownloadsPage({
         </div>
       ) : (
         <div className="flex flex-col gap-5">
-          {/* ── Systematic Storage & Playback Action Card ── */}
+          {/* ── Storage & Playback Action Card ── */}
           <div className="flex flex-col gap-4 rounded-2xl bg-card/75 border border-border/40 p-4 sm:p-5 shadow-xs">
-            {/* Header with Title and Remove All */}
             <div className="flex items-start justify-between gap-3">
               <div className="flex flex-col gap-0.5 min-w-0">
                 <span className="text-base font-bold text-foreground">Offline Storage</span>
@@ -207,7 +324,7 @@ export function DownloadsPage({
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-2.5 px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] hover:bg-primary/90"
                 >
                   <PlayActiveIcon size={16} />
-                  <span>Play All</span>
+                  <span>Play All Songs</span>
                 </button>
                 <button
                   type="button"
@@ -289,70 +406,183 @@ export function DownloadsPage({
             </section>
           )}
 
-          {/* ── Downloaded Songs Section ── */}
-          {downloads.length > 0 && (
+          {/* ── Sub-navigation: All Songs & Playlists ── */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <div
+              className="flex shrink-0 gap-1 rounded-full bg-card/70 p-1"
+              role="tablist"
+              aria-label="Downloaded sections"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={subTab === "songs"}
+                onClick={() => setSubTab("songs")}
+                className={cn(
+                  "relative isolate rounded-full px-4 py-1.5 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  subTab === "songs" ? "text-primary-foreground font-semibold" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {subTab === "songs" && (
+                  <motion.span
+                    layoutId="downloads-subtab-indicator"
+                    className="absolute inset-0 -z-10 rounded-full bg-primary"
+                    transition={{ type: "spring", stiffness: 320, damping: 32 }}
+                  />
+                )}
+                All Songs
+                <span className="ml-1.5 tabular-nums opacity-75">({downloads.length})</span>
+              </button>
+
+              <button
+                type="button"
+                role="tab"
+                aria-selected={subTab === "playlists"}
+                onClick={() => setSubTab("playlists")}
+                className={cn(
+                  "relative isolate rounded-full px-4 py-1.5 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  subTab === "playlists" ? "text-primary-foreground font-semibold" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {subTab === "playlists" && (
+                  <motion.span
+                    layoutId="downloads-subtab-indicator"
+                    className="absolute inset-0 -z-10 rounded-full bg-primary"
+                    transition={{ type: "spring", stiffness: 320, damping: 32 }}
+                  />
+                )}
+                Playlists
+                <span className="ml-1.5 tabular-nums opacity-75">({downloadedPlaylists.length})</span>
+              </button>
+            </div>
+
+            {/* Search Filter Bar */}
+            <div className="relative flex-1 min-w-44 sm:max-w-72">
+              <SearchIcon
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+              />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={subTab === "songs" ? "Filter all downloaded songs..." : "Filter downloaded playlists..."}
+                className="w-full rounded-full bg-card/70 border border-white/10 pl-8 pr-7 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/60 transition-colors"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label="Clear search"
+                >
+                  <CloseIcon size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* ── Tab 1: All Songs (Includes songs from downloaded playlists) ── */}
+          {subTab === "songs" && (
             <section className="flex flex-col gap-3">
-              {/* Optional Search Bar when many tracks */}
-              {downloads.length > 4 && (
-                <div className="relative w-full">
-                  <SearchIcon
-                    size={16}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-                  />
-                  <input
-                    type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search downloaded songs..."
-                    className="w-full rounded-xl bg-card/60 border border-border/40 pl-9 pr-8 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/60 transition-colors"
-                  />
-                  {query && (
-                    <button
-                      type="button"
-                      onClick={() => setQuery("")}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      aria-label="Clear search"
-                    >
-                      <CloseIcon size={14} />
-                    </button>
-                  )}
+              {filteredDownloads.length === 0 ? (
+                <p className="px-4 py-12 text-center text-xs sm:text-sm text-muted-foreground">
+                  {query ? `No downloaded songs match "${query}".` : "No downloaded songs yet."}
+                </p>
+              ) : (
+                <div className="flex flex-col divide-y divide-border/10 rounded-2xl bg-card/25 border border-border/30 overflow-hidden">
+                  <AnimatePresence initial={false}>
+                    {filteredDownloads.map((entry, index) => (
+                      <TrackRow
+                        key={entry.track.id}
+                        track={entry.track}
+                        index={index}
+                        showAlbum
+                        hideIndex
+                        isCurrent={currentTrackId === entry.track.id}
+                        isPlaying={isPlaying && currentTrackId === entry.track.id}
+                        isSelected={selection.isSelected(entry.track.id)}
+                        isSelectionActive={selection.isActive}
+                        onToggleSelected={() => selection.toggle(entry.track.id, index)}
+                        onSelect={(event) => playTrack(entry.track, index, event)}
+                        onContextMenu={(event) => openTrackMenu(event, entry.track)}
+                        onQuickAdd={() => openPlaylistPicker(entry.track)}
+                        onQuickAddToQueue={() => playerController.addToQueue(entry.track)}
+                        showDownload
+                        showRating
+                        trailing={
+                          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                            {formatBytes(entry.byteLength)}
+                          </span>
+                        }
+                      />
+                    ))}
+                  </AnimatePresence>
                 </div>
               )}
+            </section>
+          )}
 
-              {/* Systematic Song Rows */}
-              <div className="flex flex-col divide-y divide-border/10 rounded-2xl bg-card/25 border border-border/30 overflow-hidden">
-                <AnimatePresence initial={false}>
-                  {filteredDownloads.map((entry, index) => (
-                    <TrackRow
-                      key={entry.track.id}
-                      track={entry.track}
-                      index={index}
-                      isCurrent={currentTrackId === entry.track.id}
-                      isPlaying={isPlaying && currentTrackId === entry.track.id}
-                      onSelect={() => playTrack(entry.track)}
-                      onContextMenu={(event) => openTrackMenu(event, entry.track)}
-                      onQuickAdd={() => openPlaylistPicker(entry.track)}
-                      onQuickAddToQueue={() => playerController.addToQueue(entry.track)}
-                      showDownload
-                      showRating
-                      trailing={
-                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                          {formatBytes(entry.byteLength)}
-                        </span>
+          {/* ── Tab 2: Playlists (Downloaded Playlists) ── */}
+          {subTab === "playlists" && (
+            <section className="flex flex-col gap-3">
+              {filteredPlaylists.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-14 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    {query
+                      ? `No downloaded playlists match "${query}".`
+                      : "No downloaded playlists found."}
+                  </p>
+                  <p className="text-xs text-muted-foreground/75 max-w-md">
+                    To download a playlist, open any playlist in your library and click the Download button. All of its songs will also appear in All Songs!
+                  </p>
+                </div>
+              ) : (
+                <div className={GRID}>
+                  {filteredPlaylists.map(({ playlist, downloadedCount }) => (
+                    <AlbumCard
+                      key={playlist.id}
+                      artworkUrl={
+                        isLikedSongsId(playlist.id, playlist.kind)
+                          ? likedSongsCover
+                          : playlist.artworkUrl
                       }
+                      title={playlist.title}
+                      subtitle={
+                        downloadedCount > 0
+                          ? `${downloadedCount} downloaded ${downloadedCount === 1 ? "song" : "songs"}`
+                          : playlist.owner
+                      }
+                      onClick={() => onOpenPlaylist?.(playlist)}
+                      onContextMenu={(event) => openPlaylistMenu(event, playlist)}
                     />
                   ))}
-                </AnimatePresence>
-
-                {filteredDownloads.length === 0 && query && (
-                  <p className="px-4 py-8 text-center text-xs text-muted-foreground">
-                    No downloaded songs matching &ldquo;{query}&rdquo;.
-                  </p>
-                )}
-              </div>
+                </div>
+              )}
             </section>
           )}
         </div>
+      )}
+
+      {/* Multi-selection Action Bar for Downloaded Songs (only when standalone) */}
+      {!embedded && (
+        <SelectionBar
+          selection={selection}
+          onAddToQueue={(tracks) => {
+            playerController.addTracksToQueue(tracks);
+            selection.clear();
+          }}
+          onAddToPlaylist={(tracks) => {
+            openPlaylistPicker(tracks[0], tracks);
+            selection.clear();
+          }}
+          onDownload={(tracks) => {
+            queueDownloads(tracks);
+            selection.clear();
+          }}
+        />
       )}
     </div>
   );

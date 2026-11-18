@@ -15,6 +15,7 @@ import { logInternalError } from "../../internal/logging";
 import { SelectionBar } from "../components/SelectionBar";
 import { useTrackSelection } from "../hooks/useTrackSelection";
 import { queueDownloads, useOfflineState } from "../../player/offlineStore";
+import { recordDownloadedPlaylist } from "../../player/downloadedPlaylists";
 import { usePlaylistContextMenu } from "../components/PlaylistContextMenu";
 import { formatCollectionMeta, MediaHeader } from "../components/MediaHeader";
 import { isLikedSongsId, likedSongsCover } from "../likedSongsArtwork";
@@ -793,7 +794,10 @@ export function PlaylistView({ playlist, playerController, libraryController }: 
           }}
           download={{
             onStart: () => {
-              void collectAllTracks().then(queueDownloads);
+              void collectAllTracks().then((tracks) => {
+                recordDownloadedPlaylist(playlist, tracks);
+                queueDownloads(tracks);
+              });
             },
             counts: downloadCounts,
             isBusy: isCollectingAll,

@@ -7,6 +7,7 @@ export interface PlayerUIState {
   isLyricsOpen: boolean;
   isLyricsFullscreen: boolean;
   isQueueOpen: boolean;
+  isMobileNowPlayingOpen: boolean;
 }
 
 type Listener = () => void;
@@ -19,6 +20,7 @@ class PlayerUIStore {
     isLyricsOpen: false,
     isLyricsFullscreen: false,
     isQueueOpen: false,
+    isMobileNowPlayingOpen: false,
   };
   private listeners = new Set<Listener>();
 
@@ -75,6 +77,14 @@ class PlayerUIStore {
   toggleQueue() {
     this.setState({ isQueueOpen: !this.state.isQueueOpen });
   }
+
+  setMobileNowPlayingOpen(isMobileNowPlayingOpen: boolean) {
+    this.setState({ isMobileNowPlayingOpen });
+  }
+
+  toggleMobileNowPlaying() {
+    this.setState({ isMobileNowPlayingOpen: !this.state.isMobileNowPlayingOpen });
+  }
 }
 
 export const playerUIStore = new PlayerUIStore();
@@ -110,4 +120,8 @@ export function usePlayerUIState() {
     () => playerUIStore.getState(),
     () => playerUIStore.getState(),
   );
+}
+
+export function useIsMobileNowPlayingOpen(): boolean {
+  return usePlayerUISelector((s) => s.isMobileNowPlayingOpen);
 }

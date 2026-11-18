@@ -41,6 +41,7 @@ import { hydrateHomeSectionSettings } from "./ui/settings/homeSections";
 import { applyRenderEffects, hydrateRenderEffects } from "./ui/settings/renderEffects";
 import { applyAdaptiveTheme, hydrateAdaptiveTheme } from "./ui/settings/adaptiveTheme";
 import { hydrateAutoDownloadLiked } from "./ui/settings/autoDownloadLiked";
+import { hydrateDownloadedPlaylists } from "./player/downloadedPlaylists";
 import { startMemoryReport } from "./internal/memoryReport";
 
 logInternalInfo("main.bootstrap start");
@@ -68,6 +69,7 @@ void Promise.all([
   hydrateTheme(),
   hydrateAdaptiveTheme(),
   hydrateAutoDownloadLiked(),
+  hydrateDownloadedPlaylists(),
   hydrateWindowControlSettings(),
   hydrateMediaSessionSettings(),
   hydrateMiniPlayerSettings(),

@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from "react";
+import type { Track } from "../../datasource/types";
+import { queueDownloads } from "../../player/offlineStore";
 import {
   hydrateLocalBooleanSetting,
   readLocalBooleanSetting,
@@ -49,4 +51,9 @@ export function setAutoDownloadLikedEnabled(enabled: boolean): void {
 
 export function useAutoDownloadLikedEnabled(): boolean {
   return useSyncExternalStore(subscribe, readAutoDownloadLikedEnabled, () => false);
+}
+
+export function triggerLikedSongsDownload(likedSongs: Track[]): void {
+  if (!likedSongs || likedSongs.length === 0) return;
+  queueDownloads(likedSongs);
 }

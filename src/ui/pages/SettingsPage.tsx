@@ -1743,9 +1743,14 @@ export function SettingsPage({
             <div className="pt-1">
               <SettingToggle
                 title="Auto-download liked songs"
-                description="Automatically download songs to local device storage whenever you hit like."
+                description="Automatically download all liked songs (including existing ones) to local device storage for offline playback."
                 checked={autoDownloadLiked}
-                onCheckedChange={setAutoDownloadLikedEnabled}
+                onCheckedChange={(enabled) => {
+                  setAutoDownloadLikedEnabled(enabled);
+                  if (enabled && libraryState.library?.likedSongs?.length) {
+                    libraryController.downloadAllLikedSongs();
+                  }
+                }}
               />
             </div>
           </section>

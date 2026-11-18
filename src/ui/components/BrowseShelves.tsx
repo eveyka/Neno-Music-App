@@ -2,14 +2,17 @@ import { memo } from "react";
 import { cn } from "@/lib/utils";
 import type { Album, Artist, BrowseLink, BrowseShelf, Playlist, Track } from "../../datasource/types";
 import type { PlayerControllerActions } from "../../player/playerStore";
-import { MenuDotsIcon, PlayActiveIcon } from "../icons";
+import type { LibraryController } from "../../player/LibraryController";
+import { ChevronRightIcon, MenuDotsIcon, PlayActiveIcon } from "../icons";
 import { AlbumCard } from "./AlbumCard";
 import { TrackArtwork } from "./TrackArtwork";
 import { usePlaylistContextMenu } from "./PlaylistContextMenu";
 import { useTrackContextMenu } from "./TrackContextMenu";
+import { CommunityPlaylistCard } from "./CommunityPlaylistCard";
+import { DailyDiscoverCard } from "./DailyDiscoverCard";
 
 /** Horizontal, scrollable, and clipped at the edge so there is a hint of more. */
-const SHELF_ROW = "flex gap-2.5 sm:gap-3 overflow-x-auto pb-1.5 snap-x no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]";
+const SHELF_ROW = "flex gap-2.5 sm:gap-3.5 overflow-x-auto pb-1.5 snap-x no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]";
 
 function chunkArray<T>(arr: readonly T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -17,6 +20,21 @@ function chunkArray<T>(arr: readonly T[], size: number): T[][] {
     chunks.push(arr.slice(i, i + size));
   }
   return chunks;
+}
+
+function isCommunityShelf(title: string): boolean {
+  const t = title.toLowerCase();
+  return t.includes("community") || t.includes("कम्युनिटी");
+}
+
+function isDailyDiscoverShelf(title: string): boolean {
+  const t = title.toLowerCase();
+  return t.includes("daily discover") || t.includes("discover") || t.includes("खोज") || t.includes("for you");
+}
+
+function isHitsShelf(title: string): boolean {
+  const t = title.toLowerCase();
+  return t.includes("hit") || t.includes("trending") || t.includes("hitlist") || t.includes("सुपरहिट");
 }
 
 const QuickPickItem = memo(function QuickPickItem({
@@ -62,7 +80,7 @@ const QuickPickItem = memo(function QuickPickItem({
         {/* Play overlay on hover */}
         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150">
           <div className="size-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md scale-90 group-hover:scale-100 transition-transform">
-            <PlayActiveIcon size={14} className="translate-x-0.5" />
+            <PlayActiveIcon size={14} className="translate-x-0.5 fill-black text-black" />
           </div>
         </div>
       </div>
@@ -130,32 +148,28 @@ const PlaylistTile = memo(function PlaylistTile({ playlist, onOpen }: { playlist
   );
 });
 
-/**
- * Renders browse shelves: song rows, then chips, then artwork rails.
- *
- * Shared by the Browse surfaces and the Related page, which receive the same shelf shape from
- * different endpoints. The ordering inside a shelf is fixed rather than following the response,
- * because songs read as a list and everything else reads as artwork, and interleaving the two
- * produced a column that changed rhythm every few rows.
- */
-export const BrowseShelves = memo(function BrowseShelves({
-  shelves,
-  playerController,
-  onOpenAlbum,
-  onOpenArtist,
-  onOpenPlaylist,
-  onFollowLink,
-  className,
-}: {
+export interface BrowseShelvesProps {
   shelves: readonly BrowseShelf[];
   playerController: PlayerControllerActions;
+  libraryController?: LibraryController;
   onOpenAlbum: (album: Album) => void;
   onOpenArtist: (artist: Artist) => void;
   onOpenPlaylist: (playlist: Playlist) => void;
   /** Absent hides the chips: a surface with nowhere to drill into should not offer to. */
   onFollowLink?: (link: BrowseLink) => void;
   className?: string;
-}) {
+}
+
+export const BrowseShelves = memo(function BrowseShelves({
+  shelves,
+  playerController,
+  libraryController,
+  onOpenAlbum,
+  onOpenArtist,
+  onOpenPlaylist,
+  onFollowLink,
+  className,
+}: BrowseShelvesProps) {
   const { openTrackMenu } = useTrackContextMenu();
   const { openPlaylistMenu, openAlbumMenu } = usePlaylistContextMenu();
 
@@ -173,6 +187,11 @@ export const BrowseShelves = memo(function BrowseShelves({
           shelf.tracks.length > 0 ? "Recommended Songs" : `Section ${shelfIndex + 1}`
         );
 
+        const isCommunity = isCommunityShelf(shelfTitle) && shelf.playlists.length > 0;
+        const isDailyDiscover = isDailyDiscoverShelf(shelfTitle) && shelf.tracks.length > 0;
+        const isHits = isHitsShelf(shelfTitle) && shelf.playlists.length > 0;
+        const isArtistSpotlight = Boolean(shelf.primaryArtist);
+
         const hasMultipleTypes = [
           shelf.tracks.length > 0,
           shelf.albums.length > 0,
@@ -187,21 +206,112 @@ export const BrowseShelves = memo(function BrowseShelves({
           }
         };
 
+        // ── 1. COMMUNITY PLAYLISTS SHELF (Screenshot 1) ─────────────────
+        if (isCommunity) {
+          return (
+            <section key={`${shelfTitle}:${shelfIndex}`} className="flex flex-col gap-3.5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                  {shelfTitle}
+                </h2>
+              </div>
+
+              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
+                {shelf.playlists.map((playlist) => (
+                  <CommunityPlaylistCard
+                    key={playlist.id}
+                    playlist={playlist}
+                    playerController={playerController}
+                    libraryController={libraryController}
+                    onOpenPlaylist={onOpenPlaylist}
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        }
+
+        // ── 2. YOUR DAILY DISCOVER SHELF (Screenshot 3) ──────────────────
+        if (isDailyDiscover) {
+          return (
+            <section key={`${shelfTitle}:${shelfIndex}`} className="flex flex-col gap-3.5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                  {shelfTitle}
+                </h2>
+                {hasTracks && (
+                  <button
+                    type="button"
+                    onClick={playAllTracks}
+                    className="rounded-full border border-white/20 bg-white/10 hover:bg-white/20 active:scale-95 px-3.5 py-1 text-xs font-semibold text-white transition-all shadow-xs cursor-pointer"
+                  >
+                    Play all
+                  </button>
+                )}
+              </div>
+
+              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
+                {shelf.tracks.map((track) => (
+                  <DailyDiscoverCard
+                    key={track.id}
+                    track={track}
+                    playerController={playerController}
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        }
+
         return (
           <section key={`${shelfTitle}:${shelfIndex}`} className="flex flex-col gap-3.5">
+            {/* ── Shelf Header ─────────────────────────────────────────── */}
             <div className="flex items-center justify-between">
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">{shelfTitle}</h2>
-              {hasTracks && (
+              {isArtistSpotlight && shelf.primaryArtist ? (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => shelf.primaryArtist && onOpenArtist(shelf.primaryArtist)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      shelf.primaryArtist && onOpenArtist(shelf.primaryArtist);
+                    }
+                  }}
+                  className="flex items-center gap-2.5 group/artist cursor-pointer select-none"
+                >
+                  {shelf.primaryArtist.artworkUrl && (
+                    <TrackArtwork
+                      artworkUrl={shelf.primaryArtist.artworkUrl}
+                      size={36}
+                      iconSize={18}
+                      variant="artist"
+                      className="size-9 rounded-full object-cover ring-2 ring-white/10 shadow-sm group-hover/artist:ring-primary transition-all"
+                    />
+                  )}
+                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white group-hover/artist:text-primary transition-colors flex items-center gap-1.5">
+                    {shelf.primaryArtist.name || shelfTitle}
+                    <ChevronRightIcon size={20} className="text-white/60 group-hover/artist:text-white group-hover/artist:translate-x-0.5 transition-all" />
+                  </h2>
+                </div>
+              ) : (
+                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                  {shelfTitle}
+                </h2>
+              )}
+
+              {hasTracks && !isArtistSpotlight && (
                 <button
                   type="button"
                   onClick={playAllTracks}
-                  className="rounded-full border border-white/20 bg-white/5 hover:bg-white/10 active:scale-95 px-3 py-1 text-xs font-semibold text-white transition-all shadow-xs"
+                  className="rounded-full border border-white/20 bg-white/5 hover:bg-white/10 active:scale-95 px-3 py-1 text-xs font-semibold text-white transition-all shadow-xs cursor-pointer"
                 >
                   Play all
                 </button>
               )}
             </div>
 
+            {/* ── Tracks row (Quick picks / Songs) ──────────────────────── */}
             {hasTracks && (
               <div className="flex gap-2.5 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
                 {chunkArray(shelf.tracks, 4).map((chunk, colIndex) => (
@@ -223,6 +333,7 @@ export const BrowseShelves = memo(function BrowseShelves({
               </div>
             )}
 
+            {/* ── Follow links / Mood chips ────────────────────────────── */}
             {onFollowLink && shelf.links.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {shelf.links.map((link) => (
@@ -230,7 +341,7 @@ export const BrowseShelves = memo(function BrowseShelves({
                     key={link.browseId}
                     type="button"
                     onClick={() => onFollowLink(link)}
-                    className="rounded-full bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="rounded-full bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
                   >
                     {link.title}
                   </button>
@@ -238,6 +349,7 @@ export const BrowseShelves = memo(function BrowseShelves({
               </div>
             )}
 
+            {/* ── Albums Row ───────────────────────────────────────────── */}
             {shelf.albums.length > 0 && (
               <div className="flex flex-col gap-2.5">
                 {hasMultipleTypes && shelf.tracks.length > 0 && (
@@ -264,6 +376,7 @@ export const BrowseShelves = memo(function BrowseShelves({
               </div>
             )}
 
+            {/* ── Playlists Row (Hits / Standard) ──────────────────────── */}
             {shelf.playlists.length > 0 && (
               <div className="flex flex-col gap-2.5">
                 {hasMultipleTypes && (shelf.tracks.length > 0 || shelf.albums.length > 0) && (
@@ -271,20 +384,59 @@ export const BrowseShelves = memo(function BrowseShelves({
                     Featured Playlists
                   </h3>
                 )}
-                <div className={SHELF_ROW}>
-                  {shelf.playlists.map((playlist) => (
-                    <div
-                      key={playlist.id}
-                      onContextMenu={(event) => openPlaylistMenu(event, playlist)}
-                    >
-                      <PlaylistTile playlist={playlist} onOpen={() => onOpenPlaylist(playlist)} />
-                    </div>
-                  ))}
-                </div>
+                {isHits ? (
+                  /* Bold Hitlist / Trending playlist cards (Screenshot 2) */
+                  <div className={SHELF_ROW}>
+                    {shelf.playlists.map((playlist) => (
+                      <button
+                        key={playlist.id}
+                        type="button"
+                        onClick={() => onOpenPlaylist(playlist)}
+                        onContextMenu={(event) => openPlaylistMenu(event, playlist)}
+                        className="group/hit flex w-36 sm:w-44 shrink-0 snap-start flex-col gap-2 rounded-2xl p-1.5 text-left transition-all hover:bg-white/[0.04] active:scale-95 cursor-pointer"
+                      >
+                        <div className="relative size-36 sm:size-44 rounded-2xl overflow-hidden shadow-lg border border-white/10 bg-neutral-900">
+                          <TrackArtwork
+                            className="size-full object-cover group-hover/hit:scale-105 transition-transform duration-300"
+                            size={176}
+                            artworkUrl={playlist.artworkUrl}
+                            iconSize={32}
+                            variant="playlist"
+                          />
+                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/hit:opacity-100 transition-opacity flex items-center justify-center">
+                            <div className="size-11 rounded-full bg-white text-black flex items-center justify-center shadow-md">
+                              <PlayActiveIcon size={18} className="translate-x-0.5 fill-black text-black" />
+                            </div>
+                          </div>
+                        </div>
+                        <span className="line-clamp-2 text-sm font-bold text-white group-hover/hit:text-primary transition-colors leading-snug">
+                          {playlist.title}
+                        </span>
+                        {playlist.owner && (
+                          <span className="truncate text-xs text-white/60">
+                            {playlist.owner}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={SHELF_ROW}>
+                    {shelf.playlists.map((playlist) => (
+                      <div
+                        key={playlist.id}
+                        onContextMenu={(event) => openPlaylistMenu(event, playlist)}
+                      >
+                        <PlaylistTile playlist={playlist} onOpen={() => onOpenPlaylist(playlist)} />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
-            {shelf.artists.length > 0 && (
+            {/* ── Artists Row ──────────────────────────────────────────── */}
+            {shelf.artists.length > 0 && !isArtistSpotlight && (
               <div className="flex flex-col gap-2.5">
                 {hasMultipleTypes && (shelf.tracks.length > 0 || shelf.albums.length > 0 || shelf.playlists.length > 0) && (
                   <h3 className="text-lg font-bold tracking-tight text-foreground pt-3">
@@ -308,4 +460,3 @@ export const BrowseShelves = memo(function BrowseShelves({
     </div>
   );
 });
-

@@ -3,7 +3,7 @@ import { SpinnerSteps } from "@/components/motion/loader";
 import { Marquee } from "@/components/motion/marquee";
 import { cn } from "@/lib/utils";
 import { HeartActiveIcon, HeartBrokenIcon, HeartIcon } from "@/ui/icons";
-import { libraryController, useLibrarySelector, usePlayerSelector } from "../../../player/playerStore";
+import { useLibrarySelector, usePlayerSelector, useTrackLiked } from "../../../player/playerStore";
 import { usePlayerUIState } from "../../stores/playerUIStore";
 import { TrackArtwork } from "../TrackArtwork";
 import { ArtistLinks } from "../ArtistLinks";
@@ -19,7 +19,7 @@ export const TrackInfo = memo(function TrackInfo() {
 
   // Fast O(1) selectors instead of subscribing to whole libraryState
   const isLikePending = useLibrarySelector((s) => (currentTrack ? s.pendingLikeTrackIds.has(currentTrack.id) : false));
-  const isLiked = useLibrarySelector(() => (currentTrack ? libraryController.isTrackLiked(currentTrack.id) : false));
+  const isLiked = useTrackLiked(currentTrack?.id);
   const isLikeStatusLoading = useLibrarySelector((s) => (s.status === "restoring" || s.status === "loading") && !s.library);
   const isSignedOut = useLibrarySelector((s) => s.status === "signed-out");
 

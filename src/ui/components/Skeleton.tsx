@@ -26,7 +26,10 @@ function SkeletonBlock({
   return (
     <div
       aria-hidden="true"
-      className={cn("animate-pulse rounded-lg bg-foreground/10", className)}
+      className={cn(
+        "animate-pulse rounded-lg bg-foreground/10 transform-gpu will-change-opacity [contain:paint]",
+        className,
+      )}
       style={{ ...style, animationDelay: `${delayMs}ms` }}
     />
   );

@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   HomeActiveIcon,
   HomeIcon,
@@ -31,13 +32,43 @@ export function MobileBottomNav({
   const isSearch = activeView === "search";
   const isLibrary = activeView === "library";
   const isSettings = activeView === "settings";
+  const lastHomeClickRef = useRef<number>(0);
+
+  const handleHomeClick = () => {
+    const scrollRoot = document.querySelector("[data-page-scroll-root]");
+
+    if (!isHome) {
+      lastHomeClickRef.current = Date.now();
+      onNavigateHome();
+      if (scrollRoot) {
+        scrollRoot.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      return;
+    }
+
+    // Already on home screen:
+    const now = Date.now();
+    const isDoubleClick = now - lastHomeClickRef.current < 450;
+    lastHomeClickRef.current = isDoubleClick ? 0 : now;
+
+    if (scrollRoot) {
+      scrollRoot.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    if (isDoubleClick) {
+      // Refresh home feed completely from scratch
+      window.dispatchEvent(new CustomEvent("neno:refresh-home"));
+    }
+  };
 
   const navItems = [
     {
       id: "home",
       label: "Home",
       isActive: isHome,
-      onClick: onNavigateHome,
+      onClick: handleHomeClick,
       ActiveIcon: HomeActiveIcon,
       InactiveIcon: HomeIcon,
     },
@@ -81,12 +112,12 @@ export function MobileBottomNav({
           type="button"
           onClick={item.onClick}
           className={cn(
-            "relative flex flex-1 flex-col items-center justify-center gap-1 py-1 transition-colors select-none",
-            item.isActive ? "text-white" : "text-white/50 hover:text-white/80 active:scale-95",
+            "relative flex flex-1 flex-col items-center justify-center gap-1 py-1 select-none touch-manipulation cursor-pointer transition-transform duration-75 active:scale-90",
+            item.isActive ? "text-white" : "text-white/50 hover:text-white/80",
           )}
           aria-label={item.label}
         >
-          <div className="relative">
+          <div className="relative pointer-events-none">
             {item.isActive ? (
               <item.ActiveIcon size={24} className="text-white fill-white" />
             ) : (
@@ -95,7 +126,7 @@ export function MobileBottomNav({
           </div>
           <span
             className={cn(
-              "text-[10px] tracking-tight leading-none transition-all",
+              "text-[10px] tracking-tight leading-none transition-all pointer-events-none",
               item.isActive ? "font-semibold text-white" : "font-normal text-white/60",
             )}
           >

@@ -80,6 +80,7 @@ export interface Playlist {
   isSaved?: boolean;
   isEditable?: boolean;
   localPaths?: string[];
+  trackCount?: number;
 }
 
 /**
@@ -179,6 +180,10 @@ export interface BrowseShelf {
   links: BrowseLink[];
   /** Ordered list of mixed items in the shelf (preserving YouTube Music order) */
   items?: BrowseShelfItem[];
+  /** Optional artist associated with this shelf for artist spotlight (avatar & link) */
+  primaryArtist?: Artist;
+  /** Optional subtitle or description from header */
+  subtitle?: string;
 }
 
 export interface BrowsePage {

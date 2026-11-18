@@ -115,10 +115,68 @@ class MediaPlaybackService : Service() {
     private var resumeOnFocusGain: Boolean = false
     private var resumeAfterCall: Boolean = false
     private var isCallOngoing: Boolean = false
+    private var isCallMonitoringActive: Boolean = false
     private var audioFocusRequest: AudioFocusRequest? = null
 
     private var pendingResumeRunnable: Runnable? = null
     private val resumeHandler = Handler(Looper.getMainLooper())
+    private val callModeCheckHandler = Handler(Looper.getMainLooper())
+
+    private fun isSystemInCallMode(): Boolean {
+        val am = audioManager ?: (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
+        val currentMode = am?.mode ?: AudioManager.MODE_NORMAL
+        return currentMode == AudioManager.MODE_IN_CALL ||
+            currentMode == AudioManager.MODE_IN_COMMUNICATION ||
+            currentMode == AudioManager.MODE_RINGTONE ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && currentMode == AudioManager.MODE_CALL_SCREENING)
+    }
+
+    private val callModeCheckRunnable = object : Runnable {
+        override fun run() {
+            if (!isCallOngoing || !isCallMonitoringActive) return
+            val isStillInCall = isSystemInCallMode()
+
+            if (!isStillInCall) {
+                stopCallModeMonitoring()
+                handleCallEnded()
+            } else {
+                callModeCheckHandler.postDelayed(this, 500L)
+            }
+        }
+    }
+
+    private fun startCallModeMonitoring() {
+        if (!isCallMonitoringActive) {
+            isCallMonitoringActive = true
+            callModeCheckHandler.removeCallbacks(callModeCheckRunnable)
+            callModeCheckHandler.postDelayed(callModeCheckRunnable, 500L)
+        }
+    }
+
+    private fun stopCallModeMonitoring() {
+        isCallMonitoringActive = false
+        callModeCheckHandler.removeCallbacks(callModeCheckRunnable)
+    }
+
+    private fun handleCallEnded() {
+        val wasOngoing = isCallOngoing
+        val shouldResume = wasOngoing && (resumeAfterCall || resumeOnFocusGain)
+        isCallOngoing = false
+        resumeAfterCall = false
+        resumeOnFocusGain = false
+        stopCallModeMonitoring()
+
+        // Wait 400ms for Android audioserver to restore media routing from telecom to media HAL
+        resumeHandler.postDelayed({
+            // Force refresh hardware audio output route so the underlying AAudio stream is freshly recreated
+            sendMediaCommand("audioDeviceChanged")
+
+            if (shouldResume) {
+                // Auto-resume playback on the fresh stream
+                scheduleResumePlayback(350L)
+            }
+        }, 400L)
+    }
 
     private fun scheduleResumePlayback(delayMs: Long) {
         pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
@@ -133,39 +191,69 @@ class MediaPlaybackService : Service() {
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS -> {
-                // Permanent loss of audio focus (e.g. another music app started)
-                // If a phone call is currently active, do NOT discard resume intent —
-                // Android's InCallService often triggers AUDIOFOCUS_LOSS during an ongoing call.
-                if (!isCallOngoing) {
+                val inCall = isSystemInCallMode()
+                if (inCall || isCallOngoing) {
+                    isCallOngoing = true
+                    resumeAfterCall = true
+                    resumeOnFocusGain = true
+                    startCallModeMonitoring()
+                    if (isPlaying || currentPlaybackState == "playing") {
+                        dispatchPause(isTransient = true)
+                    }
+                } else {
+                    // Permanent focus loss to another media app (e.g. user started Spotify, YouTube, etc.)
                     resumeOnFocusGain = false
                     resumeAfterCall = false
+                    isCallOngoing = false
+                    stopCallModeMonitoring()
                     pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
                     pendingResumeRunnable = null
-                }
-                if (isPlaying || currentPlaybackState == "playing") {
-                    dispatchPause(isTransient = false)
+                    if (isPlaying || currentPlaybackState == "playing") {
+                        dispatchPause(isTransient = false)
+                    }
                 }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                // Transient loss of audio focus (e.g. incoming call, another app playing video)
-                if (isPlaying || currentPlaybackState == "playing") {
+                val inCall = isSystemInCallMode()
+                if (inCall) {
+                    // Call mode active (cellular call, WhatsApp call, etc.)
+                    isCallOngoing = true
+                    resumeAfterCall = true
                     resumeOnFocusGain = true
-                    dispatchPause(isTransient = true)
+                    startCallModeMonitoring()
+                    if (isPlaying || currentPlaybackState == "playing") {
+                        dispatchPause(isTransient = true)
+                    }
+                } else {
+                    // Video playback or other transient media in another app (Instagram Reels, YouTube, browser, etc.)
+                    // Pause the song, but DO NOT run any timer/call monitoring!
+                    // It will remain paused until the other video stops and Android issues AUDIOFOCUS_GAIN.
+                    isCallOngoing = false
+                    resumeAfterCall = false
+                    stopCallModeMonitoring()
+                    pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
+                    pendingResumeRunnable = null
+
+                    if (isPlaying || currentPlaybackState == "playing") {
+                        resumeOnFocusGain = true
+                        dispatchPause(isTransient = true)
+                    }
                 }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 // Notifications, navigation alerts, chimes: DO NOT pause music playback
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
-                // Focus regained! (call ended, video finished, audio focus restored)
                 if (isCallOngoing) {
-                    // Call is still active according to telephony manager; wait for CALL_STATE_IDLE
-                    return@OnAudioFocusChangeListener
-                }
-                if (resumeOnFocusGain || resumeAfterCall) {
+                    if (isSystemInCallMode()) {
+                        // Call is still active according to audio manager mode, wait until ended
+                        return@OnAudioFocusChangeListener
+                    }
+                    handleCallEnded()
+                } else if (resumeOnFocusGain) {
                     resumeOnFocusGain = false
-                    resumeAfterCall = false
-                    scheduleResumePlayback(300L)
+                    // The other video/media has officially finished or closed, and yielded audio focus back.
+                    scheduleResumePlayback(250L)
                 }
             }
         }
@@ -231,13 +319,13 @@ class MediaPlaybackService : Service() {
             try {
                 MainActivity.instance?.let { act ->
                     act.runOnUiThread {
-                        act.targetWebView?.let { wv ->
-                            wv.onResume()
-                            wv.resumeTimers()
-                            wv.evaluateJavascript(
-                                "if (typeof window.__neno_background_tick === 'function') { window.__neno_background_tick(); } else { void 0; }",
-                                null
-                            )
+                        val wv = act.targetWebView ?: act.window?.decorView?.let { act.findWebView(it) }?.also { act.targetWebView = it }
+                        wv?.let {
+                            it.onResume()
+                            it.resumeTimers()
+                            val tickJs = "if (typeof window.__neno_background_tick === 'function') { window.__neno_background_tick(); } else { void 0; }"
+                            it.evaluateJavascript(tickJs, null)
+                            it.loadUrl("javascript:(function(){try{" + tickJs + "}catch(e){}})()")
                         }
                     }
                 }
@@ -265,16 +353,19 @@ class MediaPlaybackService : Service() {
     // ── Becoming Noisy & Audio Route Changes (Bluetooth / Headphones) ──
     private var audioDeviceCallback: android.media.AudioDeviceCallback? = null
     private var audioRouteReceiver: BroadcastReceiver? = null
-    private var lastServiceRouteEventTime: Long = 0L
     private var isAudioRouteMonitoringActive: Boolean = false
+    private val routeChangeHandler = Handler(Looper.getMainLooper())
+    private var pendingRouteChangeRunnable: Runnable? = null
 
-    private fun notifyAudioDeviceChanged() {
+    private fun notifyAudioDeviceChanged(delayMs: Long = 450L) {
         if (!isAudioRouteMonitoringActive || isCallOngoing) return
-        val now = System.currentTimeMillis()
-        if (now - lastServiceRouteEventTime < 1000) return
-        lastServiceRouteEventTime = now
-
-        sendMediaCommand("audioDeviceChanged")
+        pendingRouteChangeRunnable?.let { routeChangeHandler.removeCallbacks(it) }
+        val runnable = Runnable {
+            pendingRouteChangeRunnable = null
+            sendMediaCommand("audioDeviceChanged")
+        }
+        pendingRouteChangeRunnable = runnable
+        routeChangeHandler.postDelayed(runnable, delayMs)
     }
 
     private fun registerAudioRouteMonitoring() {
@@ -284,11 +375,11 @@ class MediaPlaybackService : Service() {
                 if (am != null) {
                     audioDeviceCallback = object : android.media.AudioDeviceCallback() {
                         override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) {
-                            notifyAudioDeviceChanged()
+                            notifyAudioDeviceChanged(500L)
                         }
 
                         override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
-                            notifyAudioDeviceChanged()
+                            notifyAudioDeviceChanged(500L)
                         }
                     }
                     try {
@@ -304,7 +395,7 @@ class MediaPlaybackService : Service() {
                         android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED,
                         android.bluetooth.BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED,
                         AudioManager.ACTION_HEADSET_PLUG -> {
-                            notifyAudioDeviceChanged()
+                            notifyAudioDeviceChanged(500L)
                         }
                     }
                 }
@@ -330,6 +421,8 @@ class MediaPlaybackService : Service() {
     }
 
     private fun unregisterAudioRouteMonitoring() {
+        pendingRouteChangeRunnable?.let { routeChangeHandler.removeCallbacks(it) }
+        pendingRouteChangeRunnable = null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val am = audioManager ?: (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)
             audioDeviceCallback?.let {
@@ -357,6 +450,9 @@ class MediaPlaybackService : Service() {
                     isCallOngoing = false
                     dispatchPause(isTransient = false)
                 }
+                // When headphones or bluetooth unplugged/disconnected, schedule route change
+                // so switching to phone speaker doesn't fail on opening the audio device!
+                notifyAudioDeviceChanged(500L)
             }
         }
     }
@@ -417,19 +513,16 @@ class MediaPlaybackService : Service() {
                     resumeAfterCall = true
                     resumeOnFocusGain = true
                     isCallOngoing = true
+                    startCallModeMonitoring()
                     dispatchPause(isTransient = true)
                 } else if (state == TelephonyManager.CALL_STATE_OFFHOOK && isCallOngoing) {
                     // Call answered while already paused for ringing
                 }
             }
             TelephonyManager.CALL_STATE_IDLE -> {
-                // Call ended ("call cut hone ke baad")! Auto-resume playback.
-                val shouldResume = isCallOngoing && (resumeAfterCall || resumeOnFocusGain)
-                isCallOngoing = false
-                resumeAfterCall = false
-                resumeOnFocusGain = false
-                if (shouldResume) {
-                    scheduleResumePlayback(500L)
+                // Call ended ("call cut hone ke baad")! Auto-resume playback on fresh stream.
+                if (isCallOngoing || resumeAfterCall || resumeOnFocusGain) {
+                    handleCallEnded()
                 }
             }
         }
@@ -926,6 +1019,7 @@ class MediaPlaybackService : Service() {
     }
 
     override fun onDestroy() {
+        stopCallModeMonitoring()
         pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
         pendingResumeRunnable = null
         resumeOnFocusGain = false

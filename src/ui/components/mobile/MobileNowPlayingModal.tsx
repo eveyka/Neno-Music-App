@@ -35,9 +35,9 @@ import {
   libraryController,
   playerController,
   shallowEqual,
-  useLibrarySelector,
   usePlayerSelector,
   usePlayerSessionSelector,
+  useTrackLiked,
 } from "../../../player/playerStore";
 import type { PlayerSession } from "../../../player/PlayerController";
 import type { Artist, Lyrics, Track } from "../../../datasource/types";
@@ -55,10 +55,11 @@ import {
   queueDownload,
   removeDownload,
 } from "../../../player/offlineStore";
+import { playerUIStore, useIsMobileNowPlayingOpen } from "../../stores/playerUIStore";
 
 interface MobileNowPlayingModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
   onOpenArtist?: (artist: Artist) => void;
 }
 
@@ -447,7 +448,21 @@ const SleepTimerSheet = memo(function SleepTimerSheet({
   );
 });
 
-export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileNowPlayingModalProps) {
+export function MobileNowPlayingModal({
+  isOpen: propIsOpen,
+  onClose: propOnClose,
+  onOpenArtist,
+}: MobileNowPlayingModalProps) {
+  const storeIsOpen = useIsMobileNowPlayingOpen();
+  const isOpen = propIsOpen !== undefined ? propIsOpen : storeIsOpen;
+  const onClose = useCallback(() => {
+    if (propOnClose) {
+      propOnClose();
+    } else {
+      playerUIStore.setMobileNowPlayingOpen(false);
+    }
+  }, [propOnClose]);
+
   // Mode toggles
   const [queueSheetState, setQueueSheetState] = useState<QueueSheetState>("collapsed");
   const [audioMode, setAudioMode] = useState<AudioMode>("audio");
@@ -508,10 +523,8 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
     ? (getArtworkUrlCandidates(currentTrack.artworkUrl)[0] ?? currentTrack.artworkUrl)
     : undefined;
 
-  // Fast O(1) selector instead of re-running Set allocations on every library state event
-  const isLiked = useLibrarySelector(
-    () => (currentTrack ? libraryController.isTrackLiked(currentTrack.id) : false),
-  );
+  // Instant reactive hook with 0ms delay across track switches
+  const isLiked = useTrackLiked(currentTrack?.id);
 
   // downloadStatus is read per-render from the synchronous offline store.
   // Previously we had useOfflineState() at the top of the component which caused
@@ -991,18 +1004,17 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
           transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
           className="fixed inset-0 z-50 flex flex-col bg-[#050505] text-foreground select-none overflow-hidden transform-gpu will-change-transform"
         >
-          {/* Subtle Ambient Background reacting to Artwork without blur rasterization cost */}
+          {/* Subtle Ambient Background reacting to Artwork with zero mask rasterization cost */}
           {hdArtworkUrl && (
             <div
               key={hdArtworkUrl}
-              className="absolute inset-0 -z-20 pointer-events-none scale-105 bg-cover bg-center opacity-15 transition-opacity duration-300"
+              className="absolute inset-0 -z-20 pointer-events-none scale-105 bg-cover bg-center opacity-20 transition-opacity duration-300"
               style={{
                 backgroundImage: `url("${hdArtworkUrl}")`,
-                maskImage: "radial-gradient(ellipse at center, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 75%)",
-                WebkitMaskImage: "radial-gradient(ellipse at center, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 75%)",
               }}
             />
           )}
+          <div className="absolute inset-0 -z-15 pointer-events-none bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(5,5,5,0.92)_75%)]" />
           <div className="absolute inset-0 -z-10 pointer-events-none bg-gradient-to-b from-black/60 via-[#0a0a0a]/90 to-[#050505]" />
 
           {/* ── TOP HEADER (Chevron, Headphones/Lyrics Switcher, Cast, 3-Dots) ── */}
@@ -1107,6 +1119,16 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
                         artworkUrl={currentTrack?.artworkUrl}
                         className="size-full object-cover"
                       />
+                      {isLoading && (
+                        <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2.5 transition-all">
+                          <div className="size-12 rounded-full bg-black/75 border border-white/20 flex items-center justify-center shadow-lg">
+                            <SpinnerSteps size={24} className="text-primary" />
+                          </div>
+                          <span className="text-xs font-semibold text-white/90 px-3 py-1 rounded-full bg-black/60 border border-white/10 backdrop-blur-md">
+                            Buffering stream...
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1424,19 +1446,17 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
 
         {/* ── UP NEXT QUEUE BOTTOM SHEET (Only in Audio Mode) ── */}
         {audioMode === "audio" && (
-          <motion.div
-            initial={false}
-            animate={{
-              y:
+          <div
+            style={{
+              transform:
                 queueSheetState === "full"
-                  ? "0%"
+                  ? "translate3d(0, 0%, 0)"
                   : queueSheetState === "half"
-                  ? "48%"
-                  : "calc(100% - 50px)",
+                  ? "translate3d(0, 48%, 0)"
+                  : "translate3d(0, calc(100% - 50px), 0)",
             }}
-            transition={{ duration: 0.26, ease: [0.32, 0.72, 0, 1] }}
             className={cn(
-              "fixed inset-x-0 bottom-0 top-0 z-40 flex flex-col transform-gpu will-change-transform",
+              "fixed inset-x-0 bottom-0 top-0 z-40 flex flex-col transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform",
               queueSheetState === "full"
                 ? "bg-[#0a0a0a] text-foreground"
                 : queueSheetState === "half"
@@ -1577,7 +1597,7 @@ export function MobileNowPlayingModal({ isOpen, onClose, onOpenArtist }: MobileN
                 )}
               </div>
             )}
-          </motion.div>
+          </div>
         )}
 
         {/* Feedback toast */}

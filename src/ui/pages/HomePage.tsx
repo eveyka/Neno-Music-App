@@ -14,6 +14,7 @@ import { useTrackContextMenu } from "../components/TrackContextMenu";
 import { HomeDestinations, type HomeDestinationHandlers } from "../components/HomeDestinations";
 import { ArtistLinks } from "../components/ArtistLinks";
 import { BrowseShelves } from "../components/BrowseShelves";
+import { DailyDiscoverCard } from "../components/DailyDiscoverCard";
 import { SpeedDialSection } from "../components/SpeedDialSection";
 import { usePlayHistory } from "../../player/playHistory";
 import { useMadeForYouVisible, useYtmHomeFeedVisible } from "../settings/homeSections";
@@ -358,10 +359,30 @@ export function HomePage({
     return orderedShelves.find((shelf) => isQuickPicksTitle(shelf.title) || shelf.tracks.length > 0) ?? null;
   }, [orderedShelves]);
 
-  const remainingShelves = useMemo(
-    () => orderedShelves.filter((s) => s !== quickPicksShelf),
-    [orderedShelves, quickPicksShelf],
-  );
+  const remainingShelves = useMemo(() => {
+    const list = orderedShelves.filter((s) => s !== quickPicksShelf);
+
+    const getShelfPriority = (title: string): number => {
+      const t = title.toLowerCase();
+      if (t.includes("trending") || t.includes("trend") || t.includes("ट्रेंडिंग")) return 1;
+      if (t.includes("mixed") || t.includes("mixes") || t.includes("मिक्स") || t.includes("supermix")) return 2;
+      if (t.includes("community") || t.includes("कम्युनिटी")) return 3;
+      if (t.includes("cover") || t.includes("remix") || t.includes("कवर") || t.includes("रीमिक्स")) return 4;
+      if (t.includes("discover") || t.includes("खोज")) return 5;
+      if (t.includes("hit") || t.includes("hitlist") || t.includes("सुपरहिट")) return 6;
+      return 10;
+    };
+
+    return [...list].sort((a, b) => getShelfPriority(a.title) - getShelfPriority(b.title));
+  }, [orderedShelves, quickPicksShelf]);
+
+  const dailyDiscoverTracks = useMemo(() => {
+    const hasYtmDiscover = remainingShelves.some(
+      (s) => s.title.toLowerCase().includes("discover") || s.title.includes("खोज"),
+    );
+    if (hasYtmDiscover) return [];
+    return suggestions.slice(0, 8);
+  }, [remainingShelves, suggestions]);
 
   useEffect(() => {
     if (!showYtmHomeFeed) return;
@@ -374,32 +395,31 @@ export function HomePage({
 
     let cancelled = false;
     setIsLoadingHomeFeed(true);
-    libraryController
-      .getBrowsePage("home")
+
+    const browseTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Home feed request timed out")), 8000),
+    );
+
+    Promise.race([libraryController.getBrowsePage("home"), browseTimeout])
       .then((page) => {
         if (!cancelled) {
           persistentHomeFeed = page;
           setYtmHomeFeed(page);
-          setIsLoadingHomeFeed(false);
         }
       })
       .catch((error: unknown) => {
         logInternalError("HomePage.ytmHomeFeed failed", error);
+      })
+      .finally(() => {
         if (!cancelled) setIsLoadingHomeFeed(false);
       });
+
     return () => {
       cancelled = true;
     };
   }, [libraryController, libraryState.status, showYtmHomeFeed]);
 
   useEffect(() => {
-    if (isWaitingForLibrary) {
-      loadIdRef.current += 1;
-      setSuggestions([]);
-      setIsLoadingSuggestions(true);
-      return;
-    }
-
     // Preserve persistent suggestions across screen navigation
     if (persistentSuggestions && persistentSuggestions.length > 0) {
       setSuggestions(persistentSuggestions);
@@ -408,56 +428,94 @@ export function HomePage({
     }
 
     const cached = readSuggestionCache(suggestionCacheKey);
-    if (cached) {
+    if (cached && cached.length > 0) {
       persistentSuggestions = cached;
       setSuggestions(cached);
       setIsLoadingSuggestions(false);
       return;
     }
 
-    const loadId = ++loadIdRef.current;
-    setIsLoadingSuggestions(true);
+    const loadSuggestions = () => {
+      const loadId = ++loadIdRef.current;
+      setIsLoadingSuggestions(true);
 
-    let loadPromise = suggestionLoads.get(suggestionCacheKey);
-    if (!loadPromise) {
-      loadPromise = (async () => {
-        const seeds = shuffle(recentlyPlayed).slice(0, 3);
-        let loaded: Track[] = [];
+      let loadPromise = suggestionLoads.get(suggestionCacheKey);
+      if (!loadPromise) {
+        loadPromise = (async () => {
+          const seeds = shuffle(recentlyPlayed).slice(0, 3);
+          let loaded: Track[] = [];
 
-        if (seeds.length > 0) {
-          const recommendationSets = await Promise.allSettled(
-            seeds.map((seed) => libraryController.getRecommendations(seed)),
-          );
-          loaded = recommendationSets.flatMap((result) =>
-            result.status === "fulfilled" ? result.value : []
-          );
-        }
+          if (seeds.length > 0) {
+            const recsTimeout = new Promise<PromiseSettledResult<Track[]>[]>((resolve) =>
+              setTimeout(() => resolve([]), 5000),
+            );
+            const recsPromise = Promise.allSettled(
+              seeds.map((seed) => libraryController.getRecommendations(seed)),
+            );
+            const recommendationSets = await Promise.race([recsPromise, recsTimeout]);
+            loaded = recommendationSets.flatMap((result) =>
+              result.status === "fulfilled" ? result.value : []
+            );
+          }
 
-        if (loaded.length < 18) {
-          const randomQueries = shuffle(DISCOVERY_QUERIES).slice(0, 2);
-          const searchSets = await Promise.allSettled(
-            randomQueries.map((query) => searchController.searchTracks(query)),
-          );
-          for (const res of searchSets) {
-            if (res.status === "fulfilled") {
-              loaded.push(...res.value);
+          if (loaded.length < 18) {
+            const randomQueries = shuffle(DISCOVERY_QUERIES).slice(0, 2);
+            const searchTimeout = new Promise<PromiseSettledResult<Track[]>[]>((resolve) =>
+              setTimeout(() => resolve([]), 6000),
+            );
+            const searchPromise = Promise.allSettled(
+              randomQueries.map((query) => searchController.searchTracks(query)),
+            );
+            const searchSets = await Promise.race([searchPromise, searchTimeout]);
+            for (const res of searchSets) {
+              if (res.status === "fulfilled") {
+                loaded.push(...res.value);
+              }
             }
           }
-        }
 
-        return shuffle(uniqueTracks([...loaded, ...recentlyPlayed])).slice(0, 36);
-      })();
-      suggestionLoads.set(suggestionCacheKey, loadPromise);
+          return shuffle(uniqueTracks([...loaded, ...recentlyPlayed])).slice(0, 36);
+        })().catch((error) => {
+          logInternalError("HomePage loadSuggestions failed", error);
+          return [];
+        });
+        suggestionLoads.set(suggestionCacheKey, loadPromise);
+      }
+
+      void loadPromise
+        .then((loadedSuggestions) => {
+          if (loadedSuggestions.length > 0) {
+            writeSuggestionCache(suggestionCacheKey, loadedSuggestions);
+            persistentSuggestions = loadedSuggestions;
+          }
+          if (loadId !== loadIdRef.current) return;
+          if (loadedSuggestions.length > 0) {
+            setSuggestions(loadedSuggestions);
+          }
+        })
+        .catch((error) => {
+          logInternalError("HomePage loadPromise rejected", error);
+        })
+        .finally(() => {
+          suggestionLoads.delete(suggestionCacheKey);
+          if (loadId === loadIdRef.current) {
+            setIsLoadingSuggestions(false);
+          }
+        });
+    };
+
+    // If waiting for library and no cached suggestions exist, allow a brief grace period (2.5s)
+    // before falling back to discovery queries so the page never gets stuck on skeletons
+    if (isWaitingForLibrary) {
+      loadIdRef.current += 1;
+      setIsLoadingSuggestions(true);
+      const fallbackTimer = setTimeout(() => {
+        loadSuggestions();
+      }, 2500);
+      return () => clearTimeout(fallbackTimer);
     }
 
-    void loadPromise.then((loadedSuggestions) => {
-      writeSuggestionCache(suggestionCacheKey, loadedSuggestions);
-      suggestionLoads.delete(suggestionCacheKey);
-      persistentSuggestions = loadedSuggestions;
-      if (loadId !== loadIdRef.current) return;
-      setSuggestions(loadedSuggestions);
-      setIsLoadingSuggestions(false);
-    });
+    loadSuggestions();
   }, [
     isWaitingForLibrary,
     libraryController,
@@ -523,7 +581,7 @@ export function HomePage({
         return;
       }
       try {
-        const page = await libraryController.getBrowsePage("home");
+        const page = await libraryController.getBrowsePage("home", true);
         persistentHomeFeed = page;
         setYtmHomeFeed(page);
       } catch (err) {
@@ -545,6 +603,16 @@ export function HomePage({
     showYtmHomeFeed,
     suggestionCacheKey,
   ]);
+
+  useEffect(() => {
+    const onRefreshEvent = () => {
+      void handleRefresh();
+    };
+    window.addEventListener("neno:refresh-home", onRefreshEvent);
+    return () => {
+      window.removeEventListener("neno:refresh-home", onRefreshEvent);
+    };
+  }, [handleRefresh]);
 
   const handleMoodSelect = useCallback(
     async (moodId: string, chip?: BrowseLink) => {
@@ -853,13 +921,14 @@ export function HomePage({
                 <h2 className="text-xl font-bold tracking-tight text-white">Loading your feed…</h2>
                 <span className="text-xs text-muted-foreground animate-pulse">Updating…</span>
               </div>
-              <AlbumGridSkeleton count={12} label="Loading your feed" />
+              <AlbumGridSkeleton count={isMobile ? 4 : 12} label="Loading your feed" />
             </section>
           )}
           {quickPicksShelf && (
             <BrowseShelves
               shelves={[quickPicksShelf]}
               playerController={playerController}
+              libraryController={libraryController}
               onOpenAlbum={onOpenAlbum ?? NOOP}
               onOpenArtist={onOpenArtist ?? NOOP}
               onOpenPlaylist={onOpenPlaylist ?? NOOP}
@@ -888,17 +957,45 @@ export function HomePage({
       {/* ── 4. Made for you ──────────────────────────────────────────────── */}
       {showMadeForYou && madeForYouSection}
 
-      {/* ── 5. Remaining YouTube Music shelves (Albums, Community, Mixed) ─── */}
+      {/* ── 5. Remaining YouTube Music shelves (Albums, Community, Mixed, Hits) ─── */}
       {showYtmHomeFeed && libraryState.status === "ready" && remainingShelves.length > 0 && (
         <div className="flex flex-col gap-8">
           <BrowseShelves
             shelves={remainingShelves}
             playerController={playerController}
+            libraryController={libraryController}
             onOpenAlbum={onOpenAlbum ?? NOOP}
             onOpenArtist={onOpenArtist ?? NOOP}
             onOpenPlaylist={onOpenPlaylist ?? NOOP}
           />
         </div>
+      )}
+
+      {/* ── 6. Your Daily Discover (Screenshot 3 fallback) ───────────────── */}
+      {dailyDiscoverTracks.length > 0 && (
+        <section className="flex flex-col gap-3.5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+              Your daily discover
+            </h2>
+            <button
+              type="button"
+              onClick={() => playerController.playTrackById(dailyDiscoverTracks[0].id)}
+              className="rounded-full border border-white/20 bg-white/10 hover:bg-white/20 active:scale-95 px-3.5 py-1 text-xs font-semibold text-white transition-all shadow-xs cursor-pointer"
+            >
+              Play all
+            </button>
+          </div>
+          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
+            {dailyDiscoverTracks.map((track) => (
+              <DailyDiscoverCard
+                key={track.id}
+                track={track}
+                playerController={playerController}
+              />
+            ))}
+          </div>
+        </section>
       )}
 
       {compactRecent.length === 0 && isWaitingForLibrary && (
@@ -989,7 +1086,7 @@ export function HomePage({
       {moreSuggestions.length === 0 && isLoadingSuggestions && (
         <section className="flex flex-col gap-3">
           <h2 className="text-xl font-bold tracking-tight text-foreground">More recommendations</h2>
-          <AlbumGridSkeleton count={MORE_SUGGESTIONS_COUNT} label="Loading more recommendations" />
+          <AlbumGridSkeleton count={isMobile ? 4 : MORE_SUGGESTIONS_COUNT} label="Loading more recommendations" />
         </section>
       )}
 
@@ -1014,7 +1111,7 @@ export function HomePage({
       {!hasYtmListenAgain && largeRecent.length === 0 && isWaitingForLibrary && (
         <section className="flex flex-col gap-3">
           <h2 className="text-xl font-bold tracking-tight text-foreground">Listen again</h2>
-          <AlbumGridSkeleton count={RECENT_LARGE_COUNT} label="Loading listen again" />
+          <AlbumGridSkeleton count={isMobile ? 4 : RECENT_LARGE_COUNT} label="Loading listen again" />
         </section>
       )}
 

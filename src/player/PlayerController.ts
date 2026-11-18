@@ -34,10 +34,11 @@ const TRANSITION_TICK_MS = 250;
 /**
  * How early the next track is cued.
  *
- * Long enough to absorb a slow cue on a bad connection, short enough that skipping around does
- * not preload a string of tracks nobody reaches.
+ * 50 seconds allows ample headroom for mobile network latency, YouTube stream token resolution,
+ * and decoding initial audio packets onto the Rust standby deck so crossfades trigger 100%
+ * systematically on every track.
  */
-const PRELOAD_LEAD_SEC = 20;
+const PRELOAD_LEAD_SEC = 60;
 
 /**
  * How often a play in progress is reported to the provider's history.
@@ -442,7 +443,9 @@ export class PlayerController {
        * track is already known, a failed lookup falls back to what we have instead of
        * abandoning playback.
        */
-      const knownTrack = queuedTrack ?? getOfflineTrack(videoId);
+      const isDownloaded = isTrackDownloaded(videoId);
+      const offlineTrack = getOfflineTrack(videoId);
+      const knownTrack = queuedTrack ?? offlineTrack;
       const mergeWithQueued = (fetched: Track): Track => (queuedTrack
         ? {
             ...fetched,
@@ -468,6 +471,9 @@ export class PlayerController {
       let track: Track;
       if (queuedTrack?.source === "local") {
         track = queuedTrack;
+      } else if (isDownloaded && (offlineTrack || knownTrack)) {
+        // Track is downloaded locally: use offline metadata directly with zero network requests
+        track = mergeWithQueued(offlineTrack ?? knownTrack!);
       } else if (knownTrack) {
         track = mergeWithQueued(knownTrack);
         void this.dataSource.getTrack(videoId)
@@ -534,6 +540,15 @@ export class PlayerController {
         trackId: track.id,
         title: track.title,
       });
+
+      // Warm the next track shortly after current playback has successfully started,
+      // so the standby deck is decoded and buffered in advance for seamless gapless and crossfade.
+      globalThis.setTimeout(() => {
+        if (this.state.status === "playing" && this.loadedTrackId === track.id) {
+          this.warmNextTrack();
+        }
+      }, 3000);
+
       return true;
     } catch (error) {
       if (requestId !== this.playTrackRequestId) return false;
@@ -554,7 +569,8 @@ export class PlayerController {
 
         if (this.loadedTrackId && this.loadedTrackId) {
           // Try to reload the last played track
-          track = await this.dataSource.getTrack(this.loadedTrackId);
+          track = (isTrackDownloaded(this.loadedTrackId) ? getOfflineTrack(this.loadedTrackId) : null)
+            ?? await this.dataSource.getTrack(this.loadedTrackId);
           this.setState({ currentTrack: track, status: "paused", error: null });
         }
       }
@@ -582,6 +598,11 @@ export class PlayerController {
           const currentPos = this.getCurrentTime();
           this.loadedTrackId = null;
           this.audioEngine.stop();
+          try {
+            await setOutputDevice(null);
+          } catch {
+            // ignore
+          }
           await this.ensureTrackLoaded(track);
           if (currentPos > 0) {
             this.audioEngine.seekTo(currentPos);
@@ -589,7 +610,28 @@ export class PlayerController {
           playbackStarted = await this.playLoadedTrack();
         }
 
-        if (isResumingLoadedTrack) {
+        if (!playbackStarted && isResumingLoadedTrack) {
+          // If resuming a loaded track failed to start (e.g. audio device disconnected/corrupted while paused or during call),
+          // force-recover by refreshing the output device and reloading the track.
+          logInternalWarn("PlayerController.play resume failed, force recovering audio device and track", {
+            trackId: track.id,
+          });
+          const currentPos = this.getCurrentTime();
+          this.loadedTrackId = null;
+          this.audioEngine.stop();
+          try {
+            await setOutputDevice(null);
+          } catch {
+            // ignore
+          }
+          await this.ensureTrackLoaded(track);
+          if (currentPos > 0) {
+            this.audioEngine.seekTo(currentPos);
+          }
+          playbackStarted = await this.playLoadedTrack();
+        }
+
+        if (isResumingLoadedTrack && playbackStarted) {
           this.setState({ status: "playing", error: null });
         }
         if (!playbackStarted) {
@@ -1019,17 +1061,26 @@ export class PlayerController {
     const wasPlaying = this.state.status === "playing";
     const position = this.getCurrentTime();
 
-    try {
-      await setOutputDevice(null);
-    } catch (error) {
-      logInternalWarn("PlayerController.handleAudioOutputDeviceChanged setOutputDevice failed", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return;
+    // setOutputDevice in Rust drops the old stream and re-opens the device sink.
+    // Try up to 3 times with backoff in case Android audio HAL is still settling.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await setOutputDevice(null);
+        break;
+      } catch (error) {
+        logInternalWarn(`PlayerController.handleAudioOutputDeviceChanged setOutputDevice attempt ${attempt + 1} failed`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        if (attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+        }
+      }
     }
 
-    // setOutputDevice in Rust recreates the audio decks with track_id = None.
-    // Reset local loaded state and re-load the track onto the newly opened output device.
+    // Crucial: Always clear loadedTrackId and stop the audio engine so any stale
+    // stream or buffer binding is purged. This guarantees that whether auto-resuming
+    // or when the user later taps "Play" in the app, the track is freshly loaded onto
+    // the new hardware output route.
     this.loadedTrackId = null;
     this.audioEngine.stop();
 
@@ -1053,7 +1104,7 @@ export class PlayerController {
     }
   }
 
-  private async handleTrackEnded(): Promise<void> {
+  private async handleTrackEnded(forceNaturalEnd = false): Promise<void> {
     /*
      * `isTabActive` is intentionally NOT checked here.
      *
@@ -1074,7 +1125,12 @@ export class PlayerController {
     try {
       // Before every other branch: a stream that died is not an end, so it must not trigger
       // repeat-one, consume the stop-after marker, or advance the queue.
-      if (await this.recoverFromPrematureEnd()) return;
+      // If forceNaturalEnd is true (invoked via native bridge or background keepalive),
+      // we bypass premature end recovery because the track has genuinely finished decoding in Rust.
+      if (!forceNaturalEnd && (await this.recoverFromPrematureEnd())) return;
+      if (forceNaturalEnd) {
+        this.prematureEndTrackId = null;
+      }
 
       if (this.playbackOrderMode === "repeat-one" && this.state.currentTrack) {
         await this.playTrackById(this.state.currentTrack.id);
@@ -1265,6 +1321,7 @@ export class PlayerController {
   }
 
   private async refreshRestoredTrackMetadata(track: Track, restoreRequestId: number): Promise<void> {
+    if (track.source === "local" || isTrackDownloaded(track.id)) return;
     let freshTrack: Track;
     try {
       freshTrack = await this.dataSource.getTrack(track.id);
@@ -1348,9 +1405,13 @@ export class PlayerController {
        * them. A zero-length fade is the gapless case and swaps in the same tick.
        */
       if (this.usesPreloadDeck(track) && this.audioEngine.hasPreloaded(track.id)) {
+        const remainingSec = Math.max(0, this.audioEngine.getDuration() - this.audioEngine.getCurrentTime());
+        const fadeMs = this.crossfadeSec > 0
+          ? Math.round(Math.min(this.crossfadeSec * 1000, Math.max(1200, remainingSec * 1000)))
+          : 0;
         const swapped = await this.audioEngine.transitionToPreloaded(
           track.id,
-          this.crossfadeSec * 1000,
+          fadeMs,
         );
         if (swapped) {
           this.loadedTrackId = track.id;
@@ -1445,8 +1506,10 @@ export class PlayerController {
       const isNativeMode = engineMode === "native";
 
       try {
+        // If downloaded, never use an online remote stream
+        const validWarmed = isDownloaded && warmed?.rustSource?.kind === "stream" ? undefined : warmed;
         let audioData = useNativeAudio
-          ? warmed ?? await this.dataSource.getStreamData?.(track)
+          ? validWarmed ?? await this.dataSource.getStreamData?.(track)
           : undefined;
         if (useNativeAudio && !audioData) {
           throw new Error("The data source does not support native audio playback.");
@@ -1473,7 +1536,7 @@ export class PlayerController {
             );
           } catch (loadErr) {
             // If we attempted with a warmed slot and it failed, re-resolve fresh once.
-            if (warmed && useNativeAudio && this.dataSource.getStreamData) {
+            if (validWarmed && useNativeAudio && this.dataSource.getStreamData) {
               logInternalWarn("PlayerController.ensureTrackLoaded warmed stream failed, retrying fresh", {
                 trackId: track.id,
               });
@@ -1497,6 +1560,40 @@ export class PlayerController {
           engineMode,
           error: getErrorMessage(error),
         });
+
+        if (isDownloaded) {
+          // A downloaded track MUST NOT use network or fallback to YouTube iframe!
+          // Try local HTMLAudio via offline_audio_source:
+          try {
+            logInternalWarn("PlayerController.ensureTrackLoaded offline fallback via HTMLAudio", {
+              trackId: track.id,
+            });
+            const nativeSource = this.dataSource.getNativeStreamData
+              ? await this.dataSource.getNativeStreamData(track)
+              : await this.dataSource.getStreamData?.(track);
+            if (nativeSource?.sourceUrl || nativeSource?.bytes) {
+              await this.audioEngine.loadHtmlAudioFallback(
+                track.id,
+                nativeSource.sourceUrl,
+                nativeSource.bytes,
+                nativeSource.mimeType,
+              );
+              this.loadedTrackId = track.id;
+              if (this.pendingSeekTime !== null) {
+                this.audioEngine.seekTo(this.pendingSeekTime);
+                this.pendingSeekTime = null;
+              }
+              this.warmNextTrack();
+              return;
+            }
+          } catch (offlineErr) {
+            logInternalWarn("PlayerController.ensureTrackLoaded offline HTMLAudio fallback failed", {
+              trackId: track.id,
+              error: getErrorMessage(offlineErr),
+            });
+          }
+          throw error;
+        }
 
         // 1. If Rust engine failed on an online track, cascade to Native HTMLAudio
         if (isRustMode && !isDownloaded) {
@@ -1724,7 +1821,7 @@ export class PlayerController {
      * the bytes already sitting ready. `getTrack` is stale-while-revalidate, so this only ever
      * costs the one request the skip would have made anyway, moved earlier.
      */
-    if (next.source === "youtube") {
+    if (next.source === "youtube" && !isTrackDownloaded(next.id)) {
       void this.dataSource.getTrack(next.id).catch(() => {
         // Best effort. `playTrackById` still fetches it for real, and reports its own failure.
       });
@@ -1741,7 +1838,10 @@ export class PlayerController {
     if (this.warmedStream?.trackId === next.id) {
       if (this.audioEngine.usesRustAudio() && !this.audioEngine.hasPreloaded(next.id)) {
         if (this.warmedStream.data.rustSource) {
-          void this.audioEngine.preloadRustTrack(next.id, this.warmedStream.data.rustSource, next.durationSec ?? 0);
+          void this.audioEngine.preloadRustTrack(next.id, this.warmedStream.data.rustSource, next.durationSec ?? 0)
+            .catch(() => {
+              this.warmedStream = null;
+            });
         }
       }
       return;
@@ -1749,6 +1849,10 @@ export class PlayerController {
 
     const getStreamData = this.dataSource.getStreamData.bind(this.dataSource);
     this.warmingStream = true;
+    const warmingTimeout = setTimeout(() => {
+      this.warmingStream = false;
+    }, 15000);
+
     void getStreamData(next)
       .then(async (data) => {
         this.warmedStream = { trackId: next.id, data };
@@ -1757,12 +1861,14 @@ export class PlayerController {
         await this.audioEngine.preloadRustTrack(next.id, data.rustSource, next.durationSec ?? 0);
       })
       .catch((error) => {
+        this.warmedStream = null;
         logInternalWarn("PlayerController.warmNextTrack audio failed", {
           trackId: next.id,
           error: error instanceof Error ? error.message : String(error),
         });
       })
       .finally(() => {
+        clearTimeout(warmingTimeout);
         this.warmingStream = false;
       });
   }
@@ -1783,12 +1889,12 @@ export class PlayerController {
     if (this.state.status !== "playing" || this.handlingTrackEnd || this.transitioning) return;
     const duration = this.audioEngine.getDuration();
     const position = this.audioEngine.getCurrentTime();
-    if (duration > 0 && position >= duration - 0.5) {
+    if (duration > 0 && position >= Math.max(0, duration - 1.5)) {
       logInternalInfo("PlayerController.checkBackgroundTrackEnded auto-advancing queue in background", {
         position,
         duration,
       });
-      void this.handleTrackEnded();
+      void this.handleTrackEnded(true);
     }
   }
 
@@ -1798,7 +1904,7 @@ export class PlayerController {
   handleTrackEndedViaBridge(): void {
     if (this.handlingTrackEnd) return;
     logInternalInfo("PlayerController.handleTrackEndedViaBridge executing");
-    void this.handleTrackEnded();
+    void this.handleTrackEnded(true);
   }
 
   /**
@@ -1869,14 +1975,18 @@ export class PlayerController {
    * would count every track twice. Local files have no provider history to report to.
    */
   private beginPlayReport(track: Track): void {
-    if ((!this.audioEngine.usesNativeAudio() && !this.audioEngine.usesRustAudio()) || track.source === "local") return;
+    if (
+      (!this.audioEngine.usesNativeAudio() && !this.audioEngine.usesRustAudio())
+      || track.source === "local"
+      || isTrackDownloaded(track.id)
+    ) return;
     void this.dataSource.beginPlayReport?.(track);
   }
 
   /** Reports the final position of the outgoing play, if one is open. */
   private finishPlayReport(): void {
     const track = this.state.currentTrack;
-    if (!track) return;
+    if (!track || track.source === "local" || isTrackDownloaded(track.id)) return;
     void this.dataSource.updatePlayReport?.(track, this.audioEngine.getCurrentTime(), true);
   }
 
@@ -1895,7 +2005,7 @@ export class PlayerController {
 
     this.scrobbleTimerId = globalThis.setInterval(() => {
       const track = this.state.currentTrack;
-      if (!track || this.state.status !== "playing") return;
+      if (!track || this.state.status !== "playing" || track.source === "local" || isTrackDownloaded(track.id)) return;
       void this.dataSource.updatePlayReport?.(track, this.audioEngine.getCurrentTime(), false);
     }, SCROBBLE_TICK_MS);
   }
@@ -1946,10 +2056,15 @@ export class PlayerController {
     const remaining = duration - this.audioEngine.getCurrentTime();
     if (!(duration > 0) || !Number.isFinite(remaining) || remaining <= 0) return;
 
-    const next = this.peekNextTrack();
+    let next = this.peekNextTrack();
+    if (!next && this.autoplayEnabled && this.state.currentTrack) {
+      this.refillAutomaticQueue(false);
+      next = this.peekNextTrack();
+    }
     if (!next || !this.usesPreloadDeck(next)) return;
 
-    if (remaining <= PRELOAD_LEAD_SEC) {
+    const preloadThreshold = Math.max(PRELOAD_LEAD_SEC, this.crossfadeSec + 35);
+    if (remaining <= preloadThreshold) {
       if (this.audioEngine.usesRustAudio()) {
         if (!this.audioEngine.hasPreloaded(next.id) && !this.warmingStream) {
           this.warmNextTrack();
@@ -1960,15 +2075,24 @@ export class PlayerController {
     }
 
     if (this.crossfadeSec <= 0 || remaining > this.crossfadeSec) return;
-    if (!this.audioEngine.hasPreloaded(next.id)) return;
+
+    // If we've entered the crossfade window but the next track isn't ready yet,
+    // trigger warm immediately so it cues as fast as possible.
+    if (!this.audioEngine.hasPreloaded(next.id)) {
+      if (!this.warmingStream) {
+        this.warmNextTrack();
+      }
+      return;
+    }
 
     logInternalInfo("PlayerController.crossfade starting", {
       fromTrackId: this.state.currentTrack?.id ?? null,
       toTrackId: next.id,
       crossfadeSec: this.crossfadeSec,
+      remainingSec: remaining,
     });
     this.transitioning = true;
-    void this.handleTrackEnded().finally(() => {
+    void this.handleTrackEnded(true).finally(() => {
       this.transitioning = false;
     });
   }

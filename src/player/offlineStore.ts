@@ -6,6 +6,7 @@ import { logInternalError, logInternalInfo, logInternalWarn } from "../internal/
 import { getAppSetting, setAppSetting } from "../internal/appSettings";
 import { getDownloadQuality, type AudioQuality } from "../internal/audioQuality";
 import { useStoreSelector } from "../internal/useStoreSelector";
+import { clearDownloadedPlaylists } from "./downloadedPlaylists";
 
 const MANIFEST_KEY = "neno.offline-manifest.v1";
 const LEGACY_MANIFEST_KEY = "zuno.offline-manifest.v1";
@@ -264,7 +265,33 @@ export function queueDownload(track: Track): void {
 }
 
 export function queueDownloads(tracks: Track[]): void {
-  for (const track of tracks) queueDownload(track);
+  const eligible = tracks.filter((track) => {
+    if (track.source === "local") return false;
+    if (state.entries[track.id] || state.queued.includes(track.id)) return false;
+    if (state.downloadingId === track.id) return false;
+    return true;
+  });
+  if (eligible.length === 0) return;
+
+  const nextPending = { ...state.pending };
+  const nextQueued = [...state.queued];
+  const nextFailed = { ...state.failed };
+
+  for (const track of eligible) {
+    if (!nextQueued.includes(track.id)) {
+      nextQueued.push(track.id);
+      nextPending[track.id] = track;
+      delete nextFailed[track.id];
+      pendingTracks.set(track.id, track);
+    }
+  }
+
+  setState({
+    queued: nextQueued,
+    pending: nextPending,
+    failed: nextFailed,
+  });
+  void pump();
 }
 
 export function cancelDownload(trackId: string): void {
@@ -291,6 +318,7 @@ export async function removeAllDownloads(): Promise<void> {
   const ids = Object.keys(state.entries);
   setState({ queued: [], pending: {}, failed: {} });
   pendingTracks.clear();
+  clearDownloadedPlaylists();
   for (const trackId of ids) {
     await invoke("offline_audio_remove", { trackId }).catch(() => {});
   }

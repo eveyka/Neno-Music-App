@@ -181,6 +181,6 @@ export abstract class DataSource {
   getRecommendations?(seed: Track, onUpdate?: (tracks: Track[]) => void, forceRefresh?: boolean): Promise<Track[]>;
   /** Discovery shelves for a track: similar artists, related playlists, more from the album. */
   getRelated?(track: Track): Promise<BrowseShelf[]>;
-  getBrowsePage?(target: BrowseTarget): Promise<BrowsePage>;
+  getBrowsePage?(target: BrowseTarget, forceRefresh?: boolean): Promise<BrowsePage>;
   getLyrics?(track: Track): Promise<Lyrics | null>;
 }
