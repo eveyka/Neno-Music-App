@@ -234,7 +234,7 @@ export function LibraryPage({
       setQuery("");
       selection.clear();
     },
-    [selection],
+    [selection.clear],
   );
 
   const onTabKeyDown = useCallback(

@@ -96,6 +96,7 @@ export function Select({
   const [internal, setInternal] = useState(defaultValue);
   const [labels, setLabels] = useState<Map<string, string>>(new Map());
   const [placement, setPlacement] = useState<Placement>("bottom");
+  const updatePlacement = useCallback((p: Placement) => setPlacement((curr) => (curr === p ? curr : p)), []);
 
   const controlled = value !== undefined;
   const current = controlled ? value : internal;
@@ -151,7 +152,7 @@ export function Select({
       listId: `${baseId}-list`,
       disabled,
       placement,
-      setPlacement,
+      setPlacement: updatePlacement,
     }),
     [
       current,
@@ -164,6 +165,7 @@ export function Select({
       baseId,
       disabled,
       placement,
+      updatePlacement,
     ],
   );
 

@@ -223,7 +223,21 @@ export function useAndroidMediaBridge(): void {
   useEffect(() => {
     if (!isAndroidEnvironment()) return;
 
+    let lastCommand = "";
+    let lastCommandTime = 0;
+
     const handleCommand = (command: string) => {
+      const now = Date.now();
+      if (
+        (command === "next" || command === "prev" || command === "toggle" || command === "playPause") &&
+        command === lastCommand &&
+        now - lastCommandTime < 400
+      ) {
+        return;
+      }
+      lastCommand = command;
+      lastCommandTime = now;
+
       if (command.startsWith("seekTo:")) {
         const sec = parseFloat(command.substring(7));
         if (!isNaN(sec)) {

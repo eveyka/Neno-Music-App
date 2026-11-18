@@ -528,7 +528,21 @@ class MediaPlaybackService : Service() {
         }
     }
 
+    private var lastMediaCommandTime: Long = 0L
+    private var lastMediaCommand: String? = null
+
     private fun sendMediaCommand(command: String) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if ((command == "next" || command == "prev" || command == "play" || command == "pause" || command == "toggle")
+            && command == lastMediaCommand
+            && (now - lastMediaCommandTime) < 450L
+        ) {
+            android.util.Log.d("MediaPlaybackService", "Debouncing duplicate media command: $command")
+            return
+        }
+        lastMediaCommandTime = now
+        lastMediaCommand = command
+
         val act = MainActivity.instance
         if (act != null) {
             act.dispatchMediaControl(command)

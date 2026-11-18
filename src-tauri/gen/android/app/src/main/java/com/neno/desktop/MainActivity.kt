@@ -275,8 +275,11 @@ class MainActivity : TauriActivity() {
                     it.resumeTimers()
                     val escapedCommand = command.replace("'", "\\'")
                     val js = "if (window.__neno_media_command) { window.__neno_media_command('$escapedCommand'); } else if (window.__zuno_media_command) { window.__zuno_media_command('$escapedCommand'); } else { window.dispatchEvent(new CustomEvent('com.neno.desktop.MEDIA_CONTROL', { detail: { command: '$escapedCommand' } })); }"
-                    it.evaluateJavascript(js, null)
-                    it.loadUrl("javascript:(function(){try{" + js + "}catch(e){}})()")
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
+                        it.evaluateJavascript(js, null)
+                    } else {
+                        it.loadUrl("javascript:(function(){try{" + js + "}catch(e){}})()")
+                    }
                 } catch (e: Throwable) {
                     e.printStackTrace()
                 }
@@ -407,6 +410,26 @@ class MainActivity : TauriActivity() {
         @JavascriptInterface
         fun downloadAndInstallApk(downloadUrl: String, version: String) {
             activity.startApkDownloadAndInstall(downloadUrl, version)
+        }
+
+        @JavascriptInterface
+        fun isApkDownloaded(version: String): Boolean {
+            val safeVersion = version.replace("[^a-zA-Z0-9.-]".toRegex(), "_")
+            val apkFile = java.io.File(java.io.File(activity.cacheDir, "updates"), "neno-$safeVersion.apk")
+            return apkFile.exists() && apkFile.length() > 1024 * 1024
+        }
+
+        @JavascriptInterface
+        fun installDownloadedApk(version: String): Boolean {
+            val safeVersion = version.replace("[^a-zA-Z0-9.-]".toRegex(), "_")
+            val apkFile = java.io.File(java.io.File(activity.cacheDir, "updates"), "neno-$safeVersion.apk")
+            if (apkFile.exists() && apkFile.length() > 1024 * 1024) {
+                activity.runOnUiThread {
+                    activity.promptApkInstall(apkFile)
+                }
+                return true
+            }
+            return false
         }
     }
 
@@ -734,7 +757,7 @@ class MainActivity : TauriActivity() {
         }.start()
     }
 
-    private fun promptApkInstall(apkFile: java.io.File) {
+    fun promptApkInstall(apkFile: java.io.File) {
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 if (!packageManager.canRequestPackageInstalls()) {

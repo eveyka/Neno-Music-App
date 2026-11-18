@@ -675,7 +675,13 @@ export class PlayerController {
     await this.play();
   }
 
+  private lastSkipNextTime = 0;
+  private lastSkipPrevTime = 0;
+
   async skipToNext(): Promise<void> {
+    const now = Date.now();
+    if (now - this.lastSkipNextTime < 350) return;
+    this.lastSkipNextTime = now;
     this.cancelLoadingPlayback();
     return this.runNavigation(() => this.skipToNextNow());
   }
@@ -2268,6 +2274,9 @@ export class PlayerController {
   }
 
   async skipToPrevious(): Promise<void> {
+    const now = Date.now();
+    if (now - this.lastSkipPrevTime < 350) return;
+    this.lastSkipPrevTime = now;
     this.cancelLoadingPlayback();
     return this.runNavigation(() => this.skipToPreviousNow());
   }

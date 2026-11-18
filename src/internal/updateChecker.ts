@@ -130,6 +130,46 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
   };
 }
 
+export function isApkDownloadedLocally(version: string): boolean {
+  if (typeof window === "undefined") return false;
+  const bridge = (
+    window as unknown as {
+      AndroidMediaBridge?: {
+        isApkDownloaded?: (version: string) => boolean;
+      };
+    }
+  ).AndroidMediaBridge;
+
+  if (bridge && typeof bridge.isApkDownloaded === "function") {
+    try {
+      return Boolean(bridge.isApkDownloaded(version));
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+export function installDownloadedApkDirectly(version: string): boolean {
+  if (typeof window === "undefined") return false;
+  const bridge = (
+    window as unknown as {
+      AndroidMediaBridge?: {
+        installDownloadedApk?: (version: string) => boolean;
+      };
+    }
+  ).AndroidMediaBridge;
+
+  if (bridge && typeof bridge.installDownloadedApk === "function") {
+    try {
+      return Boolean(bridge.installDownloadedApk(version));
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 export async function installUpdate(
   info: UpdateInfo,
   onProgress?: (progress: UpdateInstallProgress) => void,

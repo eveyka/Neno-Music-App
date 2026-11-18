@@ -71,6 +71,8 @@ import {
   getUpdateFailureMessage,
   getInstalledVersion,
   installUpdate,
+  isApkDownloadedLocally,
+  installDownloadedApkDirectly,
   type UpdateInfo,
   type UpdateInstallProgress,
 } from "../../internal/updateChecker";
@@ -1402,7 +1404,30 @@ export function SettingsPage({
                           : "A new version of Neno is available to download."}
                   </p>
                   <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {updateResult.canInstall && (
+                    {updateResult.canInstall && isAndroid && isApkDownloadedLocally(updateResult.version) ? (
+                      <>
+                        <button
+                          className="flex items-center gap-2 rounded-full bg-emerald-500 hover:bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition-all active:scale-95 focus-visible:outline-none"
+                          type="button"
+                          onClick={() => {
+                            const triggered = installDownloadedApkDirectly(updateResult.version);
+                            if (!triggered) void handleInstallUpdate();
+                          }}
+                        >
+                          <span className="font-bold">✓</span>
+                          <span>Install</span>
+                        </button>
+                        <button
+                          className="flex items-center gap-1.5 rounded-full bg-card border border-border/50 hover:bg-muted px-3.5 py-1.5 text-xs font-medium text-foreground transition-all active:scale-95 focus-visible:outline-none"
+                          type="button"
+                          disabled={updateStatus === "installing"}
+                          onClick={() => void handleInstallUpdate()}
+                        >
+                          <RefreshIcon size={13} className={updateStatus === "installing" ? "animate-spin" : undefined} />
+                          <span>Reinstall</span>
+                        </button>
+                      </>
+                    ) : updateResult.canInstall ? (
                       <button
                         className="flex items-center gap-2 rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none"
                         type="button"
@@ -1417,7 +1442,7 @@ export function SettingsPage({
                             ? "Download & Install"
                             : "Install now"}
                       </button>
-                    )}
+                    ) : null}
                     <ExternalLinkButton
                       label={updateResult.canInstall ? "View release notes" : isAndroid ? "Download APK" : "Download"}
                       url={updateResult.releaseUrl}
