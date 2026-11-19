@@ -282,6 +282,10 @@ export class AudioEngine {
   private lastFailedStandbyVideoId: string | null = null;
   private audio: HTMLAudioElement | null = null;
   private audioObjectUrl: string | null = null;
+  private standbyAudio: HTMLAudioElement | null = null;
+  private standbyAudioObjectUrl: string | null = null;
+  private standbyNativeVideoId: string | null = null;
+  private nativeFadeIntervalId: number | null = null;
   private currentVideoId: string | null = null;
   private userPaused = true;
   private volume = 1;
@@ -313,6 +317,10 @@ export class AudioEngine {
 
   usesRustAudio(): boolean {
     return this.useRustAudio;
+  }
+
+  isUsingHtmlAudio(): boolean {
+    return Boolean(this.audio && !this.rustTrackId);
   }
 
   /**
@@ -802,8 +810,7 @@ export class AudioEngine {
    *
    * The IFrame path preloads from a video id alone, because the embed resolves its own stream.
    * Rust needs the bytes, so this is driven from `PlayerController.warmNextTrack` — which was
-   * already resolving the next track's `StreamData` ahead of time for the native engine. The
-   * only new work is handing what it found to a second deck instead of holding it in a slot.
+   * already resolving the next track's `StreamData` ahead of time for the native engine.
    */
   async preloadRustTrack(
     trackId: string,
@@ -814,14 +821,117 @@ export class AudioEngine {
     if (this.rustStandbyTrackId === trackId) return;
 
     routeRustEnded();
-    this.rustStandbyDurationSec = await rustAudio.load(trackId, source, durationSec, true);
-    this.rustStandbyTrackId = trackId;
-    logInternalInfo("AudioEngine rust preloaded", { trackId });
+    try {
+      const duration = await rustAudio.load(trackId, source, durationSec, true);
+      this.rustStandbyDurationSec = duration;
+      this.rustStandbyTrackId = trackId;
+      logInternalInfo("AudioEngine rust preloaded", { trackId });
+    } catch (err) {
+      this.rustStandbyTrackId = null;
+      this.rustStandbyDurationSec = 0;
+      throw err;
+    }
+  }
+
+  /**
+   * Preloads a track onto the native HTMLAudio standby deck.
+   * Enables seamless gapless playback and crossfading when HTMLAudio is active or as a fallback.
+   */
+  async preloadNativeAudio(
+    videoId: string,
+    sourceUrl?: string,
+    audioData?: ArrayBuffer,
+    mimeType?: string,
+  ): Promise<void> {
+    if (!videoId || videoId === this.currentVideoId) return;
+    if (this.standbyNativeVideoId === videoId && this.standbyAudio) return;
+
+    this.releaseStandbyNativeAudio();
+
+    const bytes = audioData ? new Uint8Array(audioData) : null;
+    const detectedMimeType = mimeType || (bytes ? detectAudioMimeType(bytes) : "audio/mp4");
+    const objectUrl = sourceUrl ?? URL.createObjectURL(new Blob([bytes ?? new Uint8Array()], {
+      type: detectedMimeType,
+    }));
+
+    const standby = new Audio();
+    standby.preload = "auto";
+    const audioTyped = standby as HTMLAudioElement & {
+      playsInline?: boolean;
+      webkitPlaysInline?: boolean;
+    };
+    audioTyped.playsInline = true;
+    audioTyped.webkitPlaysInline = true;
+    if (sourceUrl) standby.crossOrigin = "anonymous";
+    standby.src = objectUrl;
+    standby.volume = 0;
+
+    await new Promise<void>((resolve) => {
+      const timeoutId = window.setTimeout(() => {
+        cleanup();
+        resolve(); // Preload is best effort
+      }, 10_000);
+      const cleanup = () => {
+        window.clearTimeout(timeoutId);
+        standby.removeEventListener("canplay", handleReady);
+        standby.removeEventListener("loadedmetadata", handleReady);
+        standby.removeEventListener("error", handleError);
+      };
+      const handleReady = () => {
+        cleanup();
+        resolve();
+      };
+      const handleError = () => {
+        cleanup();
+        resolve();
+      };
+      standby.addEventListener("canplay", handleReady, { once: true });
+      standby.addEventListener("loadedmetadata", handleReady, { once: true });
+      standby.addEventListener("error", handleError, { once: true });
+      standby.load();
+    });
+
+    this.standbyAudio = standby;
+    this.standbyAudioObjectUrl = sourceUrl ? null : objectUrl;
+    this.standbyNativeVideoId = videoId;
+    logInternalInfo("AudioEngine native standby preloaded", { videoId });
+  }
+
+  private cancelNativeFade(): void {
+    if (this.nativeFadeIntervalId !== null) {
+      window.clearInterval(this.nativeFadeIntervalId);
+      this.nativeFadeIntervalId = null;
+    }
+    if (this.audio) {
+      this.audio.volume = this.muted ? 0 : this.volume;
+    }
+  }
+
+  private releaseStandbyNativeAudio(): void {
+    if (this.standbyAudio) {
+      this.standbyAudio.pause();
+      this.standbyAudio.removeAttribute("src");
+      this.standbyAudio.load();
+      this.standbyAudio = null;
+    }
+    if (this.standbyAudioObjectUrl) {
+      URL.revokeObjectURL(this.standbyAudioObjectUrl);
+      this.standbyAudioObjectUrl = null;
+    }
+    this.standbyNativeVideoId = null;
   }
 
   /** Whether a transition to `videoId` can skip loading entirely. */
   hasPreloaded(videoId: string): boolean {
-    if (this.useRustAudio) return this.rustStandbyTrackId === videoId;
+    if (this.rustTrackId) {
+      return this.rustStandbyTrackId === videoId;
+    }
+    if (this.audio) {
+      return this.standbyNativeVideoId === videoId && this.standbyAudio !== null;
+    }
+    if (this.useRustAudio) {
+      return this.rustStandbyTrackId === videoId || (this.standbyNativeVideoId === videoId && this.standbyAudio !== null);
+    }
     return this.standbyPlayer !== null && this.standbyVideoId === videoId;
   }
 
@@ -838,13 +948,55 @@ export class AudioEngine {
   async transitionToPreloaded(videoId: string, fadeMs: number): Promise<boolean> {
     if (!this.hasPreloaded(videoId)) return false;
 
-    if (this.useRustAudio) {
-      /*
-       * The whole transition happens in Rust: the standby deck is already decoded, so a zero
-       * fade starts it and stops the outgoing one in the same tick, and a non-zero fade ramps
-       * their volumes past each other on the audio thread. This is the case the `<audio>` path
-       * could never serve — one element, one body, nothing to fade against.
-       */
+    // 1. Native HTMLAudio -> Native HTMLAudio transition
+    if (this.audio && this.standbyAudio && this.standbyNativeVideoId === videoId) {
+      const outgoing = this.audio;
+      const outgoingUrl = this.audioObjectUrl;
+      const incoming = this.standbyAudio;
+      const incomingUrl = this.standbyAudioObjectUrl;
+
+      this.cancelNativeFade();
+
+      const targetVolume = this.muted ? 0 : this.volume;
+      incoming.volume = fadeMs > 0 ? 0 : targetVolume;
+      incoming.playbackRate = this.playbackRate;
+      this.userPaused = false;
+
+      this.audio = incoming;
+      this.audioObjectUrl = incomingUrl;
+      this.currentVideoId = videoId;
+      this.standbyAudio = null;
+      this.standbyAudioObjectUrl = null;
+      this.standbyNativeVideoId = null;
+      this.loadRequestId += 1;
+
+      this.attachNativeAudioListeners(incoming, videoId);
+
+      try {
+        await incoming.play();
+      } catch (err) {
+        logInternalWarn("AudioEngine.transitionToPreloaded native play failed", { videoId, error: err });
+      }
+
+      if (fadeMs > 0 && outgoing) {
+        void this.rampNativeAudioAcross(outgoing, incoming, targetVolume, fadeMs, outgoingUrl);
+      } else if (outgoing) {
+        outgoing.pause();
+        outgoing.removeAttribute("src");
+        outgoing.load();
+        if (outgoingUrl) URL.revokeObjectURL(outgoingUrl);
+      }
+
+      logInternalInfo("AudioEngine.transitionToPreloaded native", { videoId, fadeMs });
+      return true;
+    }
+
+    // 2. Rust audio -> Rust audio transition
+    if (this.useRustAudio && this.rustStandbyTrackId === videoId) {
+      if (this.audio) {
+        this.releaseNativeAudio();
+      }
+
       const swapped = await rustAudio.transition(videoId, Math.max(0, Math.round(fadeMs)));
       if (!swapped) {
         this.rustStandbyTrackId = null;
@@ -858,6 +1010,51 @@ export class AudioEngine {
       this.loadRequestId += 1;
       rustAudio.adoptTransitioned(videoId, this.rustDurationSec);
       logInternalInfo("AudioEngine.transitionToPreloaded rust", { videoId, fadeMs });
+      return true;
+    }
+
+    // 3. Native HTMLAudio -> Rust audio transition (cross-engine)
+    if (this.audio && this.rustStandbyTrackId === videoId) {
+      const outgoing = this.audio;
+      const outgoingUrl = this.audioObjectUrl;
+      this.audio = null;
+      this.audioObjectUrl = null;
+
+      const swapped = await rustAudio.transition(videoId, Math.max(0, Math.round(fadeMs)));
+      if (!swapped) {
+        this.rustStandbyTrackId = null;
+        return false;
+      }
+      this.rustStandbyTrackId = null;
+      this.rustTrackId = videoId;
+      this.rustDurationSec = this.rustStandbyDurationSec;
+      this.rustStandbyDurationSec = 0;
+      this.currentVideoId = videoId;
+      this.loadRequestId += 1;
+      rustAudio.adoptTransitioned(videoId, this.rustDurationSec);
+
+      if (fadeMs > 0 && outgoing) {
+        const targetVolume = this.muted ? 0 : this.volume;
+        const startedAt = performance.now();
+        const intervalId = window.setInterval(() => {
+          const progress = Math.min(1, (performance.now() - startedAt) / fadeMs);
+          outgoing.volume = Math.max(0, Math.min(1, targetVolume * Math.cos((progress * Math.PI) / 2)));
+          if (progress >= 1) {
+            window.clearInterval(intervalId);
+            outgoing.pause();
+            outgoing.removeAttribute("src");
+            outgoing.load();
+            if (outgoingUrl) URL.revokeObjectURL(outgoingUrl);
+          }
+        }, 20);
+      } else if (outgoing) {
+        outgoing.pause();
+        outgoing.removeAttribute("src");
+        outgoing.load();
+        if (outgoingUrl) URL.revokeObjectURL(outgoingUrl);
+      }
+
+      logInternalInfo("AudioEngine.transitionToPreloaded native-to-rust", { videoId, fadeMs });
       return true;
     }
 
@@ -895,6 +1092,43 @@ export class AudioEngine {
     outgoing?.stopVideo();
     logInternalInfo("AudioEngine.transitionToPreloaded", { videoId, fadeMs });
     return true;
+  }
+
+  private rampNativeAudioAcross(
+    outgoing: HTMLAudioElement,
+    incoming: HTMLAudioElement,
+    targetVolume: number,
+    fadeMs: number,
+    outgoingUrl: string | null,
+  ): Promise<void> {
+    return new Promise((resolve) => {
+      const startedAt = performance.now();
+      const intervalId = window.setInterval(() => {
+        const elapsed = performance.now() - startedAt;
+        const progress = Math.min(1, elapsed / fadeMs);
+
+        // Equal-power crossfade curve: cos for outgoing, sin for incoming
+        const outgoingVol = targetVolume * Math.cos((progress * Math.PI) / 2);
+        const incomingVol = targetVolume * Math.sin((progress * Math.PI) / 2);
+
+        outgoing.volume = Math.max(0, Math.min(1, outgoingVol));
+        incoming.volume = Math.max(0, Math.min(1, incomingVol));
+
+        if (progress >= 1) {
+          window.clearInterval(intervalId);
+          if (this.nativeFadeIntervalId === intervalId) {
+            this.nativeFadeIntervalId = null;
+          }
+          outgoing.pause();
+          outgoing.removeAttribute("src");
+          outgoing.load();
+          if (outgoingUrl) URL.revokeObjectURL(outgoingUrl);
+          incoming.volume = targetVolume;
+          resolve();
+        }
+      }, 20);
+      this.nativeFadeIntervalId = intervalId;
+    });
   }
 
   /** Ramps the outgoing deck down and the incoming deck up over the same window. */
@@ -1115,70 +1349,7 @@ export class AudioEngine {
     audioTyped.webkitPlaysInline = true;
     if (sourceUrl) audio.crossOrigin = "anonymous";
     audio.src = objectUrl;
-    audio.addEventListener("ended", () => {
-      if (
-        Number.isFinite(audio.duration) &&
-        audio.duration > 5 &&
-        audio.currentTime < audio.duration - 2
-      ) {
-        logInternalWarn("AudioEngine: Native audio ended prematurely before track finish", {
-          videoId,
-          currentTime: audio.currentTime,
-          duration: audio.duration,
-        });
-        if (!this.userPaused && this.currentVideoId === videoId && playbackOwner === this) {
-          const resumePos = audio.currentTime;
-          audio.currentTime = resumePos;
-          audio.play().catch((err) => {
-            logInternalWarn("AudioEngine: failed to recover native audio from premature end", {
-              error: err instanceof Error ? err.message : String(err),
-            });
-          });
-          return;
-        }
-      }
-      this.emitEnded();
-    });
-    audio.addEventListener("pause", () => {
-      if (
-        !this.userPaused &&
-        this.currentVideoId === videoId &&
-        playbackOwner === this &&
-        !audio.ended
-      ) {
-        logInternalInfo("AudioEngine: Native audio auto-paused, resuming playback", {
-          videoId,
-        });
-        window.setTimeout(() => {
-          if (
-            !this.userPaused &&
-            this.currentVideoId === videoId &&
-            playbackOwner === this &&
-            !audio.ended &&
-            audio.paused
-          ) {
-            audio.play().catch((err) => {
-              logInternalWarn("AudioEngine: failed to auto-resume native audio", {
-                error: err instanceof Error ? err.message : String(err),
-              });
-            });
-          }
-        }, 50);
-      }
-    });
-    audio.addEventListener("waiting", () => {
-      logInternalInfo("AudioEngine: Native audio waiting for buffer", { videoId });
-    });
-    audio.addEventListener("stalled", () => {
-      logInternalWarn("AudioEngine: Native audio playback stalled", { videoId });
-    });
-    audio.addEventListener("error", () => {
-      logInternalError(
-        "AudioEngine native audio error",
-        new Error(`Native audio failed with media error ${audio.error?.code ?? "unknown"}.`),
-        { videoId },
-      );
-    });
+    this.attachNativeAudioListeners(audio, videoId);
     this.audio = audio;
     this.audioObjectUrl = sourceUrl ? null : objectUrl;
     this.currentVideoId = videoId;
@@ -1245,9 +1416,78 @@ export class AudioEngine {
     });
   }
 
+  private attachNativeAudioListeners(audio: HTMLAudioElement, videoId: string): void {
+    audio.addEventListener("ended", () => {
+      if (
+        Number.isFinite(audio.duration) &&
+        audio.duration > 5 &&
+        audio.currentTime < audio.duration - 2
+      ) {
+        logInternalWarn("AudioEngine: Native audio ended prematurely before track finish", {
+          videoId,
+          currentTime: audio.currentTime,
+          duration: audio.duration,
+        });
+        if (!this.userPaused && this.currentVideoId === videoId && playbackOwner === this) {
+          const resumePos = audio.currentTime;
+          audio.currentTime = resumePos;
+          audio.play().catch((err) => {
+            logInternalWarn("AudioEngine: failed to recover native audio from premature end", {
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+          return;
+        }
+      }
+      this.emitEnded();
+    });
+    audio.addEventListener("pause", () => {
+      if (
+        !this.userPaused &&
+        this.currentVideoId === videoId &&
+        playbackOwner === this &&
+        !audio.ended
+      ) {
+        logInternalInfo("AudioEngine: Native audio auto-paused, resuming playback", {
+          videoId,
+        });
+        window.setTimeout(() => {
+          if (
+            !this.userPaused &&
+            this.currentVideoId === videoId &&
+            playbackOwner === this &&
+            !audio.ended &&
+            audio.paused
+          ) {
+            audio.play().catch((err) => {
+              logInternalWarn("AudioEngine: failed to auto-resume native audio", {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            });
+          }
+        }, 50);
+      }
+    });
+    audio.addEventListener("waiting", () => {
+      logInternalInfo("AudioEngine: Native audio waiting for buffer", { videoId });
+    });
+    audio.addEventListener("stalled", () => {
+      logInternalWarn("AudioEngine: Native audio playback stalled", { videoId });
+    });
+    audio.addEventListener("error", () => {
+      logInternalError(
+        "AudioEngine native audio error",
+        new Error(`Native audio failed with media error ${audio.error?.code ?? "unknown"}.`),
+        { videoId },
+      );
+    });
+  }
+
   private applyNativeAudioSettings(): void {
     if (!this.audio) return;
-    this.audio.volume = this.muted ? 0 : this.volume;
+    if (this.nativeFadeIntervalId === null) {
+      this.audio.volume = this.muted ? 0 : this.volume;
+    }
     this.audio.muted = this.muted;
     this.audio.playbackRate = this.playbackRate;
     /*
@@ -1296,6 +1536,8 @@ export class AudioEngine {
   }
 
   private releaseNativeAudio(): void {
+    this.cancelNativeFade();
+    this.releaseStandbyNativeAudio();
     if (this.audio) {
       this.audio.pause();
       this.audio.removeAttribute("src");
@@ -1332,7 +1574,7 @@ export class AudioEngine {
       if (engine !== this) engine.pauseForPlaybackClaim();
     }
     for (const media of document.querySelectorAll<HTMLMediaElement>("audio, video")) {
-      if (media !== this.audio) {
+      if (media !== this.audio && media !== this.standbyAudio) {
         media.pause();
       }
     }
@@ -1343,6 +1585,7 @@ export class AudioEngine {
   private pauseForPlaybackClaim(): void {
     if (this.rustTrackId) void rustAudio.pause().catch(() => {});
     this.audio?.pause();
+    this.standbyAudio?.pause();
     this.player?.pauseVideo();
     // The standby is cued rather than playing, but a mid-crossfade claim would otherwise
     // leave the outgoing deck — now the standby — running under the new owner's audio.

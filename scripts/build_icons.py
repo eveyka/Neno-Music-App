@@ -2,9 +2,9 @@ import os
 from PIL import Image, ImageDraw
 
 # 1. Source image
-src_path = 'assets/Logo&Icons/image copy.png'
+src_path = 'app-icon.png'
 if not os.path.exists(src_path):
-    src_path = 'assets/Logo&Icons/image.png'
+    src_path = 'assets/app-icon-padded.png'
 
 src_img = Image.open(src_path).convert('RGBA')
 
@@ -14,7 +14,7 @@ logo_cropped = src_img.crop(bbox)
 logo_w, logo_h = logo_cropped.size
 print(f"Source: {src_path}, Logo bounding box: {bbox}, dimensions: {logo_w}x{logo_h}")
 
-def make_icon(size, scale_ratio=0.72, bg_color=(255, 255, 255, 255), is_round=False):
+def make_icon(size, scale_ratio=0.72, bg_color=(7, 7, 7, 255), is_round=False):
     """
     Creates an icon of `size` x `size`.
     `scale_ratio`: proportion of `size` occupied by the logo.
@@ -45,9 +45,11 @@ def make_icon(size, scale_ratio=0.72, bg_color=(255, 255, 255, 255), is_round=Fa
     canvas.paste(scaled_logo, (offset_x, offset_y), scaled_logo)
     return canvas
 
+DARK_BG = (7, 7, 7, 255)
+
 # --- 1. Master icon for Tauri CLI ---
 # Using 72% scale for a clean, zoomed-out look
-master_1024 = make_icon(1024, scale_ratio=0.72, bg_color=(255, 255, 255, 255))
+master_1024 = make_icon(1024, scale_ratio=0.72, bg_color=DARK_BG)
 master_1024.save('assets/app-icon-padded.png', 'PNG')
 print("Generated assets/app-icon-padded.png")
 
@@ -78,14 +80,14 @@ for base_dir in target_android_dirs:
         fg_path = os.path.join(density_dir, 'ic_launcher_foreground.png')
         fg_icon.save(fg_path, 'PNG')
         
-        # Legacy square launcher icon (white bg, zoomed-out logo ~72%)
+        # Legacy square launcher icon (dark bg, zoomed-out logo ~72%)
         legacy_size = sizes['legacy']
-        legacy_icon = make_icon(legacy_size, scale_ratio=0.72, bg_color=(255, 255, 255, 255))
+        legacy_icon = make_icon(legacy_size, scale_ratio=0.72, bg_color=DARK_BG)
         legacy_path = os.path.join(density_dir, 'ic_launcher.png')
         legacy_icon.save(legacy_path, 'PNG')
         
-        # Legacy round launcher icon (white circular bg, zoomed-out logo ~64%)
-        round_icon = make_icon(legacy_size, scale_ratio=0.64, bg_color=(255, 255, 255, 255), is_round=True)
+        # Legacy round launcher icon (dark circular bg, zoomed-out logo ~64%)
+        round_icon = make_icon(legacy_size, scale_ratio=0.64, bg_color=DARK_BG, is_round=True)
         round_path = os.path.join(density_dir, 'ic_launcher_round.png')
         round_icon.save(round_path, 'PNG')
         
@@ -94,7 +96,7 @@ for base_dir in target_android_dirs:
 # --- 3. Large Notification Icon ---
 large_notif_dir = 'src-tauri/gen/android/app/src/main/res/drawable'
 os.makedirs(large_notif_dir, exist_ok=True)
-notif_large = make_icon(256, scale_ratio=0.72, bg_color=(255, 255, 255, 255))
+notif_large = make_icon(256, scale_ratio=0.72, bg_color=DARK_BG)
 notif_large.save(os.path.join(large_notif_dir, 'ic_notification_large.png'), 'PNG')
 print(f"Generated {large_notif_dir}/ic_notification_large.png")
 
@@ -118,13 +120,13 @@ desktop_sizes = {
 }
 
 for path, sz in desktop_sizes.items():
-    icon = make_icon(sz, scale_ratio=0.72, bg_color=(255, 255, 255, 255))
+    icon = make_icon(sz, scale_ratio=0.72, bg_color=DARK_BG)
     icon.save(path, 'PNG')
     print(f"Generated {path} ({sz}x{sz})")
 
 # Generate .ico file for Windows (contains 16, 32, 48, 64, 128, 256 sizes)
 ico_sizes = [16, 32, 48, 64, 128, 256]
-ico_images = [make_icon(s, scale_ratio=0.72, bg_color=(255, 255, 255, 255)) for s in ico_sizes]
+ico_images = [make_icon(s, scale_ratio=0.72, bg_color=DARK_BG) for s in ico_sizes]
 ico_images[0].save(
     'src-tauri/icons/icon.ico',
     format='ICO',

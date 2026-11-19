@@ -32,9 +32,9 @@ check(!hasPreloadDeck("iframe", streamed), "iframe does not preload streamed tra
 check(!hasPreloadDeck("iframe", downloaded), "iframe must not restream a download");
 check(!hasPreloadDeck("iframe", local), "iframe cannot play a local file at all");
 
-// One `<audio>` element, one body, no standby.
-check(!hasPreloadDeck("native", streamed), "native has no second deck to preload onto");
-check(!hasPreloadDeck("native", downloaded), "native has no second deck, downloaded or not");
-check(!hasPreloadDeck("native", local), "native has no second deck for local files either");
+// Dual-deck native audio supports preloading onto standbyAudio
+check(hasPreloadDeck("native", streamed), "native preloads streamed tracks onto standby deck");
+check(hasPreloadDeck("native", downloaded), "native preloads downloaded tracks onto standby deck");
+check(hasPreloadDeck("native", local), "native preloads local files onto standby deck");
 
 console.log("preloadDeck.check.ts OK");

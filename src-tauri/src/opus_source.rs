@@ -54,46 +54,7 @@ pub(crate) fn is_opus(mime_type: &str) -> bool {
  * `None` means the bytes look like nothing recognised and the declared type is as good a guess
  * as any.
  */
-pub(crate) fn sniff_container_mime(
-    reader: &mut (impl std::io::Read + std::io::Seek),
-) -> std::io::Result<Option<&'static str>> {
-    let mut header = [0u8; 64];
-    let mut filled = 0;
-    while filled < header.len() {
-        match reader.read(&mut header[filled..]) {
-            Ok(0) => break,
-            Ok(read) => filled += read,
-            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(error) => return Err(error),
-        }
-    }
-    reader.seek(std::io::SeekFrom::Start(0))?;
-    Ok(container_mime_of(&header[..filled]))
-}
-
-/// The magic-number half of `sniff_container_mime`, split out so it can be tested on bytes.
-fn container_mime_of(header: &[u8]) -> Option<&'static str> {
-    if header.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]) {
-        // Matroska. YouTube's WebM audio is always Opus, and a WebM carrying Vorbis instead is
-        // rare enough that failing loudly on it beats guessing the other way on every download.
-        return Some("audio/webm; codecs=\"opus\"");
-    }
-    if header.starts_with(b"OggS") {
-        // Ogg carries either, and only the codec header inside the first page says which.
-        return Some(if header.windows(8).any(|window| window == b"OpusHead") {
-            "audio/opus"
-        } else {
-            "audio/ogg"
-        });
-    }
-    if header.len() >= 12 && &header[4..8] == b"ftyp" {
-        return Some("audio/mp4");
-    }
-    if header.starts_with(b"fLaC") {
-        return Some("audio/flac");
-    }
-    None
-}
+pub(crate) use crate::container_sniff::sniff_container_mime;
 
 /**
  * How long the track is, according to the container.

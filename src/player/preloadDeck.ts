@@ -33,6 +33,7 @@ export type PreloadSubject = {
 export function hasPreloadDeck(engine: AudioEngineMode, _track: PreloadSubject): boolean {
   switch (engine) {
     case "rust":
+    case "native":
       return true;
     case "iframe":
       /*

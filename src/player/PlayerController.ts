@@ -219,6 +219,7 @@ export class PlayerController {
   /** Audio resolved ahead of time for the next track, claimed by `ensureTrackLoaded`. */
   private warmedStream: { trackId: string; data: StreamData } | null = null;
   private warmingStream = false;
+  private warmingTrackId: string | null = null;
   private crossfadeSec = 0;
   private gaplessEnabled = true;
   private transitionTimerId: number | null = null;
@@ -1835,19 +1836,33 @@ export class PlayerController {
 
     if (!this.audioEngine.usesNativeAudio() && !this.audioEngine.usesRustAudio()) return;
     if (!this.dataSource.getStreamData) return;
-    if (this.warmingStream) return;
+    if (this.warmingStream && this.warmingTrackId === next.id) return;
 
-    const isLocalOrDownloaded = next.source === "local" || isTrackDownloaded(next.id);
-    if (isLocalOrDownloaded && !this.audioEngine.usesRustAudio()) {
-      return;
-    }
     if (this.warmedStream?.trackId === next.id) {
-      if (this.audioEngine.usesRustAudio() && !this.audioEngine.hasPreloaded(next.id)) {
+      if (this.audioEngine.usesRustAudio() && !this.audioEngine.hasPreloaded(next.id) && !this.audioEngine.isUsingHtmlAudio()) {
         if (this.warmedStream.data.rustSource) {
           void this.audioEngine.preloadRustTrack(next.id, this.warmedStream.data.rustSource, next.durationSec ?? 0)
             .catch(() => {
-              this.warmedStream = null;
+              if (this.warmedStream?.data.sourceUrl || this.warmedStream?.data.bytes) {
+                void this.audioEngine.preloadNativeAudio(
+                  next.id,
+                  this.warmedStream.data.sourceUrl,
+                  this.warmedStream.data.bytes,
+                  this.warmedStream.data.mimeType,
+                );
+              }
             });
+          return;
+        }
+      }
+      if (!this.audioEngine.hasPreloaded(next.id)) {
+        if (this.warmedStream.data.sourceUrl || this.warmedStream.data.bytes) {
+          void this.audioEngine.preloadNativeAudio(
+            next.id,
+            this.warmedStream.data.sourceUrl,
+            this.warmedStream.data.bytes,
+            this.warmedStream.data.mimeType,
+          );
         }
       }
       return;
@@ -1855,16 +1870,37 @@ export class PlayerController {
 
     const getStreamData = this.dataSource.getStreamData.bind(this.dataSource);
     this.warmingStream = true;
+    this.warmingTrackId = next.id;
     const warmingTimeout = setTimeout(() => {
       this.warmingStream = false;
-    }, 15000);
+      this.warmingTrackId = null;
+    }, 12000);
 
     void getStreamData(next)
       .then(async (data) => {
         this.warmedStream = { trackId: next.id, data };
         logInternalDebug("PlayerController.warmNextTrack audio ready", { trackId: next.id });
-        if (!data.rustSource || !this.audioEngine.usesRustAudio()) return;
-        await this.audioEngine.preloadRustTrack(next.id, data.rustSource, next.durationSec ?? 0);
+
+        if (data.rustSource && this.audioEngine.usesRustAudio() && !this.audioEngine.isUsingHtmlAudio()) {
+          try {
+            await this.audioEngine.preloadRustTrack(next.id, data.rustSource, next.durationSec ?? 0);
+            return;
+          } catch (rustErr) {
+            logInternalWarn("PlayerController.warmNextTrack rust preload failed, falling back to native preload", {
+              trackId: next.id,
+              error: rustErr instanceof Error ? rustErr.message : String(rustErr),
+            });
+          }
+        }
+
+        if (data.sourceUrl || data.bytes) {
+          await this.audioEngine.preloadNativeAudio(
+            next.id,
+            data.sourceUrl,
+            data.bytes,
+            data.mimeType,
+          );
+        }
       })
       .catch((error) => {
         this.warmedStream = null;
@@ -1876,6 +1912,7 @@ export class PlayerController {
       .finally(() => {
         clearTimeout(warmingTimeout);
         this.warmingStream = false;
+        this.warmingTrackId = null;
       });
   }
 
@@ -2071,8 +2108,8 @@ export class PlayerController {
 
     const preloadThreshold = Math.max(PRELOAD_LEAD_SEC, this.crossfadeSec + 35);
     if (remaining <= preloadThreshold) {
-      if (this.audioEngine.usesRustAudio()) {
-        if (!this.audioEngine.hasPreloaded(next.id) && !this.warmingStream) {
+      if (this.audioEngine.usesRustAudio() || this.audioEngine.isUsingHtmlAudio()) {
+        if (!this.audioEngine.hasPreloaded(next.id) && (!this.warmingStream || this.warmingTrackId !== next.id)) {
           this.warmNextTrack();
         }
       } else {
@@ -2085,7 +2122,7 @@ export class PlayerController {
     // If we've entered the crossfade window but the next track isn't ready yet,
     // trigger warm immediately so it cues as fast as possible.
     if (!this.audioEngine.hasPreloaded(next.id)) {
-      if (!this.warmingStream) {
+      if (!this.warmingStream || this.warmingTrackId !== next.id) {
         this.warmNextTrack();
       }
       return;

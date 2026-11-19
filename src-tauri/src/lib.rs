@@ -51,6 +51,7 @@ mod process_memory;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod discord_rpc;
 mod equalizer;
+mod container_sniff;
 #[cfg(not(target_os = "android"))]
 mod opus_source;
 
@@ -4337,25 +4338,17 @@ fn sniffed_mime(
     declared: String,
     label: &str,
 ) -> String {
-    #[cfg(not(target_os = "android"))]
-    {
-        match opus_source::sniff_container_mime(file) {
-            Ok(Some(sniffed)) if sniffed != declared => {
-                eprintln!(
-                    "[internal][tauri][info] container sniffed {} declared={} actual={}",
-                    label, declared, sniffed
-                );
-                sniffed.to_string()
-            }
-            Ok(_) => declared,
-            // Unreadable here means unreadable for the decoder too; let that report it.
-            Err(_) => declared,
+    match container_sniff::sniff_container_mime(file) {
+        Ok(Some(sniffed)) if sniffed != declared => {
+            eprintln!(
+                "[internal][tauri][info] container sniffed {} declared={} actual={}",
+                label, declared, sniffed
+            );
+            sniffed.to_string()
         }
-    }
-    #[cfg(target_os = "android")]
-    {
-        let _ = (file, label);
-        declared
+        Ok(_) => declared,
+        // Unreadable here means unreadable for the decoder too; let that report it.
+        Err(_) => declared,
     }
 }
 
