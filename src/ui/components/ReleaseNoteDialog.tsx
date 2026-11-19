@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { RELEASE_NOTE_BODY } from "../../internal/releaseNote";
+import whatsNewIcon from "../../../assets/img/whats-new-icon.png";
 
 interface ReleaseNoteDialogProps {
   /** The version being announced, or null when there is nothing to announce. */
@@ -59,20 +60,31 @@ export function ReleaseNoteDialog({ version, onDismiss }: ReleaseNoteDialogProps
             exit={{ opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.12 } }}
             transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.7 }}
           >
-            {/* Header */}
-            <div className="relative border-b border-border/40 px-6 pt-6 pb-4">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold tracking-wider text-primary uppercase">
-                  <span className="size-1.5 rounded-full bg-primary animate-pulse" />
-                  What's New
-                </span>
+            {/* Header with App Waveform Icon */}
+            <div className="relative border-b border-border/40 px-6 pt-6 pb-4 bg-gradient-to-b from-card/80 to-transparent">
+              <div className="flex items-center gap-4">
+                <div className="relative size-14 shrink-0 rounded-2xl p-0.5 bg-gradient-to-br from-primary/50 via-white/10 to-transparent shadow-[0_8px_24px_rgba(255,0,0,0.28)] ring-1 ring-white/15">
+                  <img
+                    src={whatsNewIcon}
+                    alt="Neno Music Waveform"
+                    className="size-full rounded-[14px] object-cover"
+                  />
+                </div>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 border border-primary/25 px-2.5 py-0.5 text-[10px] font-bold tracking-wider text-primary uppercase shadow-xs">
+                      <span className="size-1.5 rounded-full bg-primary animate-pulse" />
+                      What's New
+                    </span>
+                  </div>
+                  <h2 id="release-note-title" className="mt-1 text-2xl font-black tracking-tight text-foreground">
+                    Neno Music <span className="text-primary font-bold">v{version}</span>
+                  </h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground truncate">
+                    Explore new features, improvements & performance updates.
+                  </p>
+                </div>
               </div>
-              <h2 id="release-note-title" className="mt-2 text-2xl font-bold tracking-tight text-foreground">
-                Neno <span className="text-primary font-semibold">v{version}</span>
-              </h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Here's what has been improved and added in this release.
-              </p>
             </div>
 
             {/* Scrollable Structured Feature List */}
@@ -111,23 +123,34 @@ export function ReleaseNoteDialog({ version, onDismiss }: ReleaseNoteDialogProps
               })}
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-between border-t border-border/40 px-6 py-4 bg-popover/80 backdrop-blur-md">
-              <span className="text-xs text-muted-foreground/70">
-                Tap anywhere outside or Got it to close
-              </span>
+            {/* Footer with Structured Action Bar */}
+            <div className="flex flex-col gap-2.5 border-t border-border/40 px-6 py-4 bg-card/70 backdrop-blur-md">
               <button
                 ref={dismissRef}
                 type="button"
-                className={cn(
-                  "rounded-full bg-primary px-6 py-2.5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20",
-                  "transition-all duration-150 hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98]",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                )}
                 onClick={onDismiss}
+                className={cn(
+                  "group relative flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-primary to-primary/90 py-3 px-6 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/25",
+                  "transition-all duration-200 hover:brightness-110 active:scale-[0.98] cursor-pointer select-none",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                )}
               >
-                Got it
+                <span>Got it</span>
+                <svg
+                  className="size-4.5 transition-transform duration-200 group-hover:scale-110"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
               </button>
+              <p className="text-center text-[11px] text-muted-foreground/60 select-none">
+                Tap Got it or anywhere outside to close
+              </p>
             </div>
           </motion.div>
         </motion.div>

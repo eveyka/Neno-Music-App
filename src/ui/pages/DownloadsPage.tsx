@@ -8,6 +8,7 @@ import {
   PlayActiveIcon,
   SearchIcon,
   ShuffleIcon,
+  StorageIcon,
   TrashIcon,
 } from "@/ui/icons";
 import type { Album, Artist, Playlist, Track } from "../../datasource/types";
@@ -69,6 +70,7 @@ export function DownloadsPage({
   const [subTab, setSubTab] = useState<DownloadsSubTab>("songs");
   const [query, setQuery] = useState("");
   const [confirmRemoveAll, setConfirmRemoveAll] = useState(false);
+  const [showOfflineStorage, setShowOfflineStorage] = useState(false);
   const { currentTrackId, isPlaying } = useNowPlaying();
   const { openTrackMenu, openPlaylistPicker } = useTrackContextMenu();
   const { openPlaylistMenu } = usePlaylistContextMenu();
@@ -264,80 +266,114 @@ export function DownloadsPage({
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-5">
-          {/* ── Storage & Playback Action Card ── */}
-          <div className="flex flex-col gap-4 rounded-2xl bg-card/75 border border-border/40 p-4 sm:p-5 shadow-xs">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-base font-bold text-foreground">Offline Storage</span>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {formatBytes(offline.usedBytes)} of {formatBytes(maxBytes)} allocated ({usedPercent}%)
-                  {offline.downloadingId
-                    ? offline.progress !== null
-                      ? ` · downloading ${offline.progress}%`
-                      : " · downloading"
-                    : ""}
-                </span>
-              </div>
-
-              {downloads.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirmRemoveAll) {
-                      void removeAllDownloads();
-                      setConfirmRemoveAll(false);
-                      return;
-                    }
-                    setConfirmRemoveAll(true);
-                  }}
-                  onBlur={() => setConfirmRemoveAll(false)}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all shrink-0 select-none",
-                    confirmRemoveAll
-                      ? "bg-destructive text-destructive-foreground shadow-sm shadow-destructive/20 animate-pulse"
-                      : "bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20",
-                  )}
-                >
-                  <TrashIcon size={14} />
-                  <span>{confirmRemoveAll ? "Confirm Remove All" : "Remove All"}</span>
-                </button>
-              )}
+        <div className="flex flex-col gap-4">
+          {/* ── Primary Action Bar with Play, Shuffle & Storage Details Toggle ── */}
+          {downloads.length > 0 && (
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => playAllDownloads(false)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-2.5 px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] hover:bg-primary/90"
+              >
+                <PlayActiveIcon size={16} />
+                <span>Play All Songs</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => playAllDownloads(true)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-card py-2.5 px-4 text-sm font-semibold text-foreground border border-border/50 transition-transform active:scale-[0.98] hover:bg-muted"
+                aria-label="Shuffle all downloaded songs"
+              >
+                <ShuffleIcon size={16} />
+                <span>Shuffle</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowOfflineStorage((prev) => !prev)}
+                className={cn(
+                  "flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-3.5 text-xs font-semibold border transition-all duration-200 active:scale-95 cursor-pointer select-none",
+                  showOfflineStorage
+                    ? "bg-primary/15 text-primary border-primary/30 shadow-xs"
+                    : "bg-card/80 text-muted-foreground hover:text-foreground border-border/50 hover:bg-card",
+                )}
+                title={showOfflineStorage ? "Hide storage details" : "Show offline storage details"}
+                aria-expanded={showOfflineStorage}
+                aria-label="Toggle offline storage details"
+              >
+                <StorageIcon size={16} />
+                <span className="hidden sm:inline">Storage</span>
+              </button>
             </div>
+          )}
 
-            {/* Storage Meter Bar */}
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted/60">
+          {/* ── Collapsible Offline Storage Details Card (Hidden by Default) ── */}
+          <AnimatePresence>
+            {showOfflineStorage && (
               <motion.div
-                className="h-full rounded-full bg-primary"
-                initial={false}
-                animate={{ width: `${Math.max(2, usedPercent)}%` }}
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              />
-            </div>
+                key="offline-storage-details-card"
+                initial={{ opacity: 0, height: 0, y: -6 }}
+                animate={{ opacity: 1, height: "auto", y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -6 }}
+                transition={{ duration: 0.22, ease: "easeInOut" }}
+                className="overflow-hidden"
+              >
+                <div className="flex flex-col gap-3.5 rounded-2xl bg-card/75 border border-border/40 p-4 sm:p-5 shadow-xs">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-bold text-foreground">Offline Storage</span>
+                        <span className="rounded-full bg-primary/15 border border-primary/25 px-2 py-0.5 text-[10px] font-bold text-primary">
+                          {usedPercent}% used
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {formatBytes(offline.usedBytes)} of {formatBytes(maxBytes)} allocated
+                        {offline.downloadingId
+                          ? offline.progress !== null
+                            ? ` · downloading ${offline.progress}%`
+                            : " · downloading"
+                          : ""}
+                      </span>
+                    </div>
 
-            {/* Play All & Shuffle Buttons */}
-            {downloads.length > 0 && (
-              <div className="flex items-center gap-2.5 pt-1">
-                <button
-                  type="button"
-                  onClick={() => playAllDownloads(false)}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-2.5 px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] hover:bg-primary/90"
-                >
-                  <PlayActiveIcon size={16} />
-                  <span>Play All Songs</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => playAllDownloads(true)}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-card py-2.5 px-4 text-sm font-semibold text-foreground border border-border/50 transition-transform active:scale-[0.98] hover:bg-muted"
-                  aria-label="Shuffle all downloaded songs"
-                >
-                  <ShuffleIcon size={16} />
-                  <span>Shuffle</span>
-                </button>
-              </div>
+                    {downloads.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirmRemoveAll) {
+                            void removeAllDownloads();
+                            setConfirmRemoveAll(false);
+                            return;
+                          }
+                          setConfirmRemoveAll(true);
+                        }}
+                        onBlur={() => setConfirmRemoveAll(false)}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all shrink-0 select-none",
+                          confirmRemoveAll
+                            ? "bg-destructive text-destructive-foreground shadow-sm shadow-destructive/20 animate-pulse"
+                            : "bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20",
+                        )}
+                      >
+                        <TrashIcon size={14} />
+                        <span>{confirmRemoveAll ? "Confirm Remove All" : "Remove All"}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Storage Meter Bar */}
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted/60">
+                    <motion.div
+                      className="h-full rounded-full bg-primary"
+                      initial={false}
+                      animate={{ width: `${Math.max(2, usedPercent)}%` }}
+                      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    />
+                  </div>
+                </div>
+              </motion.div>
             )}
-          </div>
+          </AnimatePresence>
 
           {/* ── Active In-Flight Downloads Section ── */}
           {inFlight.length > 0 && (
