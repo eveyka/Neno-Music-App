@@ -23,12 +23,11 @@ import { getAppSetting, setAppSetting } from "./appSettings";
  */
 const SEEN_VERSION_KEY = "release-note-seen-version";
 
-export const RELEASE_NOTE_BODY = `**In-App Updates** — download and install updates directly inside the app with live download progress.
-**Performance** — smooth 60/120 FPS animations, GPU-accelerated transitions, and reduced APK size.
-**Accounts** — switch between multiple YouTube Music accounts instantly, no signing out required.
-**Sound** — pick your exact output device, plus a bypass toggle and mini EQ right in the player bar.
-**Playlists** — enhanced shuffle, seamless loop cycles, and library playlist management.
-**Fixes** — background playback audio keepalive, smoother crossfades, and a second launch refocusing Neno instead of opening twice.
+export const RELEASE_NOTE_BODY = `**What's New** — sleek redesign with custom 3D glowing waveform branding and structured Got it action.
+**Offline Storage** — collapsible storage details card with smooth toggle button in your Downloads library.
+**Crossfade Engine** — true dual-deck crossfade now works 100% reliably for both online and offline/downloaded songs.
+**Performance** — lightning-fast response times, 60/120 FPS animations, and parallel build optimizations.
+**In-App Updates** — download and install new versions directly with real-time progress.
 
 Enjoy your listening!`;
 
