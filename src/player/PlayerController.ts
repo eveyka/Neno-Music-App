@@ -1097,52 +1097,57 @@ export class PlayerController {
   async handleAudioOutputDeviceChanged(): Promise<void> {
     if (!usesRustAudioEngine()) return;
     if (this.isRecoveringPlayback) return;
-
-    logInternalInfo("PlayerController.handleAudioOutputDeviceChanged refreshing audio output route");
-
-    const track = this.state.currentTrack;
-    const wasPlaying = this.state.status === "playing";
-    const position = this.lastValidPlaybackPositionSec > 0 ? this.lastValidPlaybackPositionSec : this.getCurrentTime();
+    this.isRecoveringPlayback = true;
 
     try {
-      await setOutputDevice(null);
-    } catch (err) {
-      logInternalWarn("PlayerController.handleAudioOutputDeviceChanged setOutputDevice failed", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+      logInternalInfo("PlayerController.handleAudioOutputDeviceChanged refreshing audio output route");
 
-    this.loadedTrackId = null;
-    this.audioEngine.stop();
-    this.pendingSeekTime = position > 0 ? position : null;
+      const track = this.state.currentTrack;
+      const wasPlaying = this.state.status === "playing";
+      const position = this.lastValidPlaybackPositionSec > 0 ? this.lastValidPlaybackPositionSec : this.getCurrentTime();
 
-    if (track) {
       try {
-        await this.ensureTrackLoaded(track);
-        if (position > 0) {
-          try {
-            this.audioEngine.seekTo(position);
-          } catch {
-            // ignore
-          }
-        }
-        if (wasPlaying) {
-          const started = await this.playLoadedTrack();
-          if (started) {
-            this.setState({ status: "playing", error: null });
-          } else {
-            // Fall back to beginning 0:00 if position seek failed
-            this.pendingSeekTime = null;
-            this.lastValidPlaybackPositionSec = 0;
-            await this.playLoadedTrack();
-            this.setState({ status: "playing", error: null });
-          }
-        }
-      } catch (error) {
-        logInternalWarn("PlayerController.handleAudioOutputDeviceChanged track reload failed", {
-          error: error instanceof Error ? error.message : String(error),
+        await setOutputDevice(null);
+      } catch (err) {
+        logInternalWarn("PlayerController.handleAudioOutputDeviceChanged setOutputDevice failed", {
+          error: err instanceof Error ? err.message : String(err),
         });
       }
+
+      this.loadedTrackId = null;
+      this.audioEngine.stop();
+      this.pendingSeekTime = position > 0 ? position : null;
+
+      if (track) {
+        try {
+          await this.ensureTrackLoaded(track);
+          if (position > 0) {
+            try {
+              this.audioEngine.seekTo(position);
+            } catch {
+              // ignore
+            }
+          }
+          if (wasPlaying) {
+            const started = await this.playLoadedTrack();
+            if (started) {
+              this.setState({ status: "playing", error: null });
+            } else {
+              // Fall back to beginning 0:00 if position seek failed
+              this.pendingSeekTime = null;
+              this.lastValidPlaybackPositionSec = 0;
+              await this.playLoadedTrack();
+              this.setState({ status: "playing", error: null });
+            }
+          }
+        } catch (error) {
+          logInternalWarn("PlayerController.handleAudioOutputDeviceChanged track reload failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    } finally {
+      this.isRecoveringPlayback = false;
     }
   }
 
@@ -1170,6 +1175,19 @@ export class PlayerController {
 
     try {
       if (usesRustAudioEngine()) {
+        // Fast path: if the track is still loaded on the deck, resume directly
+        if (this.loadedTrackId === track.id && this.audioEngine.isDeckLoaded(track.id)) {
+          try {
+            const started = await this.playLoadedTrack();
+            if (started) {
+              this.setState({ status: "playing", error: null });
+              return;
+            }
+          } catch {
+            // Audio output route invalidated by Telecom HAL, fall through to refresh
+          }
+        }
+
         try {
           await setOutputDevice(null);
         } catch (err) {

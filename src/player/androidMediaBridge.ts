@@ -228,11 +228,7 @@ export function useAndroidMediaBridge(): void {
 
     const handleCommand = (command: string) => {
       const now = Date.now();
-      if (
-        (command === "next" || command === "prev" || command === "toggle" || command === "playPause") &&
-        command === lastCommand &&
-        now - lastCommandTime < 400
-      ) {
+      if (command === lastCommand && now - lastCommandTime < 350) {
         return;
       }
       lastCommand = command;

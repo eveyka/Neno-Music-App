@@ -1117,8 +1117,10 @@ class MediaPlaybackService : Service() {
         stopCallModeMonitoring()
         pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
         pendingResumeRunnable = null
-        resumeOnFocusGain = false
-        resumeAfterCall = false
+        pausedDueToInterruption = false
+        isInterruptedByCall = false
+        isInterruptedByAudioFocus = false
+        isInterruptedByBluetoothShift = false
         isCallOngoing = false
         serviceKeepaliveHandler.removeCallbacks(serviceKeepaliveRunnable)
         wakeLockReleaseHandler.removeCallbacks(wakeLockReleaseRunnable)
