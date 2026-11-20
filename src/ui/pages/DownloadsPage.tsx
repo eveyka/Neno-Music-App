@@ -269,39 +269,38 @@ export function DownloadsPage({
         <div className="flex flex-col gap-4">
           {/* ── Primary Action Bar with Play, Shuffle & Storage Details Toggle ── */}
           {downloads.length > 0 && (
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 w-full">
               <button
                 type="button"
                 onClick={() => playAllDownloads(false)}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-2.5 px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-transform active:scale-[0.98] hover:bg-primary/90"
+                className="h-11 sm:h-12 flex-1 flex items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm shadow-primary/25 transition-transform active:scale-95 hover:brightness-110"
               >
-                <PlayActiveIcon size={16} />
-                <span>Play All Songs</span>
+                <PlayActiveIcon size={18} />
+                <span className="whitespace-nowrap">Play All</span>
               </button>
               <button
                 type="button"
                 onClick={() => playAllDownloads(true)}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-card py-2.5 px-4 text-sm font-semibold text-foreground border border-border/50 transition-transform active:scale-[0.98] hover:bg-muted"
+                className="h-11 sm:h-12 flex-1 flex items-center justify-center gap-2 rounded-full bg-card/90 border border-white/10 px-4 text-sm font-semibold text-foreground transition-transform active:scale-95 hover:bg-muted"
                 aria-label="Shuffle all downloaded songs"
               >
-                <ShuffleIcon size={16} />
-                <span>Shuffle</span>
+                <ShuffleIcon size={18} />
+                <span className="whitespace-nowrap">Shuffle</span>
               </button>
               <button
                 type="button"
                 onClick={() => setShowOfflineStorage((prev) => !prev)}
                 className={cn(
-                  "flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-3.5 text-xs font-semibold border transition-all duration-200 active:scale-95 cursor-pointer select-none",
+                  "size-11 sm:size-12 shrink-0 flex items-center justify-center rounded-full border transition-all active:scale-95 select-none",
                   showOfflineStorage
-                    ? "bg-primary/15 text-primary border-primary/30 shadow-xs"
-                    : "bg-card/80 text-muted-foreground hover:text-foreground border-border/50 hover:bg-card",
+                    ? "bg-primary/20 text-primary border-primary/40 shadow-sm"
+                    : "bg-card/90 text-foreground border-white/10 hover:bg-muted",
                 )}
                 title={showOfflineStorage ? "Hide storage details" : "Show offline storage details"}
                 aria-expanded={showOfflineStorage}
                 aria-label="Toggle offline storage details"
               >
-                <StorageIcon size={16} />
-                <span className="hidden sm:inline">Storage</span>
+                <StorageIcon size={18} />
               </button>
             </div>
           )}
@@ -468,7 +467,6 @@ export function DownloadsPage({
                   />
                 )}
                 All Songs
-                <span className="ml-1.5 tabular-nums opacity-75">({downloads.length})</span>
               </button>
 
               <button
@@ -490,7 +488,6 @@ export function DownloadsPage({
                   />
                 )}
                 Playlists
-                <span className="ml-1.5 tabular-nums opacity-75">({downloadedPlaylists.length})</span>
               </button>
             </div>
 
@@ -528,7 +525,7 @@ export function DownloadsPage({
                   {query ? `No downloaded songs match "${query}".` : "No downloaded songs yet."}
                 </p>
               ) : (
-                <div className="flex flex-col divide-y divide-border/10 rounded-2xl bg-card/25 border border-border/30 overflow-hidden">
+                <div className="flex flex-col gap-2 sm:gap-2.5">
                   <AnimatePresence initial={false}>
                     {filteredDownloads.map((entry, index) => (
                       <TrackRow

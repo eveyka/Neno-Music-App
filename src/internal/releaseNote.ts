@@ -23,10 +23,11 @@ import { getAppSetting, setAppSetting } from "./appSettings";
  */
 const SEEN_VERSION_KEY = "release-note-seen-version";
 
-export const RELEASE_NOTE_BODY = `**Crossfade Engine** — smooth dual-deck crossfade transition now plays next tracks seamlessly every time without jumping.
-**Modern Island UI** — revamped song card lists with sleek floating island design, systematic layout, and butter-smooth 60/120 FPS scrolling.
-**Unified Header & Search** — search is seamlessly integrated into the action options bar with instant expand and live filtering.
-**Performance & Size** — ultra-lightweight and fast, optimized Android builds.
+export const RELEASE_NOTE_BODY = `**Library Redesign** — clean, unnumbered tabs for Downloads, Liked Songs, and Playlists.
+**Structured Liked Songs** — Hero banner now sits cleanly above search and sort filters for a natural, intuitive flow.
+**Sleek Action Controls** — redesigned single-line Play All, Shuffle, and Storage buttons across Downloads and Library.
+**Artist Releases Grid** — beautifully aligned horizontal filter chips (All, Albums, Singles, EPs) and responsive 2-column album cards.
+**Signed Release Build** — official production release signing key with zero Play Protect debug warnings.
 
 Enjoy your listening!`;
 

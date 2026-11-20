@@ -277,13 +277,6 @@ export function LibraryPage({
     }
   };
 
-  const counts: Record<LibraryTab, number> = {
-    downloads: Object.keys(offline.entries).length,
-    liked: allLikedSongs.length,
-    playlists: visiblePlaylists.length,
-    albums: albums.length,
-  };
-
   if (!library) {
     return (
       <p className="px-2 py-16 text-center text-sm text-muted-foreground">
@@ -341,21 +334,118 @@ export function LibraryPage({
                     />
                   )}
                   {item.label}
-                  <span className="ml-1.5 tabular-nums opacity-60">({counts[item.value]})</span>
                 </button>
               );
             })}
           </div>
+        </div>
+      </header>
 
-          {/* Search & Sort Controls (Shown for Liked, Albums, Playlists tabs) */}
-          {tab !== "downloads" && (
-            <div className="flex w-full sm:w-auto sm:ml-auto min-w-0 items-center justify-between sm:justify-end gap-2">
-              <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full bg-card/70 px-3.5 text-muted-foreground transition-colors focus-within:bg-card focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring sm:max-w-72">
+      {/* ── Main Content Area ── */}
+      <div id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-tab-${tab}`}>
+        {/* 1. DOWNLOADS OPTION */}
+        {tab === "downloads" && (
+          <DownloadsPage
+            playerController={playerController}
+            libraryController={libraryController}
+            libraryState={libraryState}
+            onOpenAlbum={onOpenAlbum}
+            onOpenArtist={onOpenArtist}
+            onOpenPlaylist={onOpenPlaylist}
+            embedded
+          />
+        )}
+
+        {/* 2. LIKED SONGS OPTION */}
+        {tab === "liked" && (
+          <div className="flex flex-col gap-4">
+            {/* Action Bar for Liked Songs */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-card/75 border border-white/10 p-4 sm:p-5 shadow-xs">
+              <div className="flex items-center gap-3.5">
+                <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/15 text-primary shrink-0 shadow-inner">
+                  <HeartIcon size={24} fill="currentColor" />
+                </div>
+                <div className="flex flex-col min-w-0 gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-bold text-foreground">Liked Songs</span>
+                    <span className="rounded-full bg-primary/15 border border-primary/25 px-2 py-0.5 text-xs font-bold text-primary tabular-nums">
+                      {allLikedSongs.length}
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    All songs you have liked across your YouTube Music account.
+                  </span>
+                </div>
+              </div>
+
+              {/* Play / Shuffle / Download All / Auto-Download Toggle */}
+              <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-0">
+                {likedSongs.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => playAllLikedSongs(false)}
+                      className="h-10 flex items-center justify-center gap-2 rounded-full bg-primary px-4 text-xs font-semibold text-primary-foreground shadow-sm shadow-primary/25 transition-transform active:scale-95 hover:brightness-110"
+                    >
+                      <PlayActiveIcon size={15} />
+                      <span>Play All</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => playAllLikedSongs(true)}
+                      className="h-10 flex items-center justify-center gap-2 rounded-full bg-card/90 border border-white/10 px-4 text-xs font-semibold text-foreground transition-transform active:scale-95 hover:bg-muted"
+                      aria-label="Shuffle liked songs"
+                    >
+                      <ShuffleIcon size={15} />
+                      <span>Shuffle</span>
+                    </button>
+                  </>
+                )}
+
+                {/* Download All liked songs button */}
+                {unDownloadedLikedCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={handleDownloadAllLiked}
+                    className="h-10 flex items-center justify-center gap-2 rounded-full bg-secondary/80 hover:bg-secondary border border-white/10 px-3.5 text-xs font-semibold text-secondary-foreground transition-all active:scale-95"
+                    title="Download all liked songs to offline storage"
+                  >
+                    <DownloadIcon size={15} />
+                    <span>Download All ({unDownloadedLikedCount})</span>
+                  </button>
+                ) : allLikedSongs.length > 0 ? (
+                  <div className="h-10 flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-3.5 text-xs font-semibold text-emerald-400">
+                    <CheckIcon size={15} />
+                    <span>All downloaded</span>
+                  </div>
+                ) : null}
+
+                {/* Auto-download Liked Songs Toggle with live status */}
+                <button
+                  type="button"
+                  onClick={() => handleToggleAutoDownloadLiked(!autoDownloadLiked)}
+                  className={cn(
+                    "h-10 flex items-center justify-center gap-2 rounded-full px-3.5 text-xs font-semibold border transition-all active:scale-95 select-none",
+                    autoDownloadLiked
+                      ? "bg-primary/15 text-primary border-primary/30"
+                      : "bg-card/90 text-muted-foreground border-white/10 hover:text-foreground",
+                  )}
+                  title="When enabled, automatically downloads all old and new liked songs to listen offline"
+                >
+                  <DownloadIcon size={15} />
+                  <span>Auto-download {autoDownloadLiked ? "ON" : "OFF"}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filter and Sort Row - Placed directly below the Liked Songs Action card */}
+            <div className="flex w-full min-w-0 items-center justify-between gap-2.5">
+              <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full bg-card/70 border border-white/10 px-3.5 text-muted-foreground transition-colors focus-within:bg-card focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring">
                 <SearchIcon size={16} aria-hidden="true" className="shrink-0" />
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder={`Filter ${tab === "liked" ? "liked songs" : tab}`}
+                  placeholder="Filter liked songs..."
                   aria-label="Filter library"
                   className="w-full min-w-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
                 />
@@ -385,111 +475,9 @@ export function LibraryPage({
                 <SelectContent>
                   <SelectItem value="recent">Recently added</SelectItem>
                   <SelectItem value="title">Title</SelectItem>
-                  <SelectItem value="artist">
-                    {tab === "playlists" ? "Owner" : "Artist"}
-                  </SelectItem>
+                  <SelectItem value="artist">Artist</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-          )}
-        </div>
-      </header>
-
-      {/* ── Main Content Area ── */}
-      <div id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-tab-${tab}`}>
-        {/* 1. DOWNLOADS OPTION */}
-        {tab === "downloads" && (
-          <DownloadsPage
-            playerController={playerController}
-            libraryController={libraryController}
-            libraryState={libraryState}
-            onOpenAlbum={onOpenAlbum}
-            onOpenArtist={onOpenArtist}
-            onOpenPlaylist={onOpenPlaylist}
-            embedded
-          />
-        )}
-
-        {/* 2. LIKED SONGS OPTION */}
-        {tab === "liked" && (
-          <div className="flex flex-col gap-5">
-            {/* Action Bar for Liked Songs */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl bg-card/70 border border-border/40 p-4 sm:p-5 shadow-xs">
-              <div className="flex items-center gap-3">
-                <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/15 text-primary shrink-0 shadow-inner">
-                  <HeartIcon size={22} fill="currentColor" />
-                </div>
-                <div className="flex flex-col gap-2 sm:gap-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-bold text-foreground">Liked Songs</span>
-                    <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary tabular-nums">
-                      {allLikedSongs.length}
-                    </span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    All songs you have liked across your YouTube Music account.
-                  </span>
-                </div>
-              </div>
-
-              {/* Play / Shuffle / Download All / Auto-Download Toggle */}
-              <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-0">
-                {likedSongs.length > 0 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => playAllLikedSongs(false)}
-                      className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-transform active:scale-95 hover:bg-primary/90"
-                    >
-                      <PlayActiveIcon size={14} />
-                      <span>Play All</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => playAllLikedSongs(true)}
-                      className="flex items-center gap-1.5 rounded-xl bg-card border border-border/50 px-3.5 py-2 text-xs font-semibold text-foreground transition-transform active:scale-95 hover:bg-muted"
-                      aria-label="Shuffle liked songs"
-                    >
-                      <ShuffleIcon size={14} />
-                      <span>Shuffle</span>
-                    </button>
-                  </>
-                )}
-
-                {/* Download All liked songs button */}
-                {unDownloadedLikedCount > 0 ? (
-                  <button
-                    type="button"
-                    onClick={handleDownloadAllLiked}
-                    className="flex items-center gap-1.5 rounded-xl bg-secondary/80 hover:bg-secondary px-3 py-2 text-xs font-semibold text-secondary-foreground transition-all active:scale-95"
-                    title="Download all liked songs to offline storage"
-                  >
-                    <DownloadIcon size={14} />
-                    <span>Download All ({unDownloadedLikedCount})</span>
-                  </button>
-                ) : allLikedSongs.length > 0 ? (
-                  <div className="flex items-center gap-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs font-medium text-emerald-400">
-                    <CheckIcon size={14} />
-                    <span>All downloaded</span>
-                  </div>
-                ) : null}
-
-                {/* Auto-download Liked Songs Toggle with live status */}
-                <button
-                  type="button"
-                  onClick={() => handleToggleAutoDownloadLiked(!autoDownloadLiked)}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border transition-all active:scale-95 select-none",
-                    autoDownloadLiked
-                      ? "bg-primary/15 text-primary border-primary/30"
-                      : "bg-card text-muted-foreground border-border/50 hover:text-foreground",
-                  )}
-                  title="When enabled, automatically downloads all old and new liked songs to listen offline"
-                >
-                  <DownloadIcon size={14} />
-                  <span>Auto-download {autoDownloadLiked ? "ON" : "OFF"}</span>
-                </button>
-              </div>
             </div>
 
             {/* Song list */}
@@ -526,70 +514,156 @@ export function LibraryPage({
 
         {/* 3. PLAYLISTS OPTION */}
         {tab === "playlists" && (
-          playlists.length === 0 ? (
-            <EmptyState noun="playlists" query={query.trim()} onClearQuery={() => setQuery("")} />
-          ) : (
-            <div className="flex flex-col gap-3">
-              {hiddenPlaylistCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowHiddenPlaylists((current) => !current)}
-                  className="flex w-fit items-center gap-1.5 rounded-full bg-card/70 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          <div className="flex flex-col gap-4">
+            <div className="flex w-full min-w-0 items-center justify-between gap-2.5">
+              <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full bg-card/70 border border-white/10 px-3.5 text-muted-foreground transition-colors focus-within:bg-card focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring">
+                <SearchIcon size={16} aria-hidden="true" className="shrink-0" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Filter playlists..."
+                  aria-label="Filter playlists"
+                  className="w-full min-w-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                />
+                {isFiltering && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    aria-label="Clear filter"
+                    className="shrink-0 rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <CloseIcon size={14} />
+                  </button>
+                )}
+              </label>
+
+              <Select
+                className="w-auto shrink-0"
+                value={activeSort}
+                onValueChange={(value) => setSort(value as LibrarySort)}
+              >
+                <SelectTrigger
+                  className="h-10 rounded-full border border-white/10 bg-card/70 px-3.5 text-sm whitespace-nowrap gap-2 hover:bg-card"
+                  aria-label="Sort playlists"
                 >
-                  {showHiddenPlaylists ? <EyeClosedIcon size={14} /> : <EyeIcon size={14} />}
-                  {showHiddenPlaylists
-                    ? "Hide the hidden playlists"
-                    : `Show ${hiddenPlaylistCount} hidden`}
-                </button>
-              )}
-              {displayedPlaylists.length === 0 ? (
-                <p className="px-2 py-16 text-center text-sm text-muted-foreground">
-                  All your playlists are hidden.
-                </p>
-              ) : (
-                <div className={GRID}>
-                  {displayedPlaylists.map((playlist) => (
-                    <div
-                      key={playlist.id}
-                      className={hiddenPlaylistIdSet.has(playlist.id) ? "opacity-40" : undefined}
-                    >
-                      <AlbumCard
-                        artworkUrl={
-                          isLikedSongsId(playlist.id, playlist.kind)
-                            ? likedSongsCover
-                            : playlist.artworkUrl
-                        }
-                        title={playlist.title}
-                        subtitle={playlist.owner}
-                        onClick={() => onOpenPlaylist(playlist)}
-                        onContextMenu={(event) => openPlaylistMenu(event, playlist)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
+                  <SelectValue className="truncate whitespace-nowrap" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recent">Recently added</SelectItem>
+                  <SelectItem value="title">Title</SelectItem>
+                  <SelectItem value="artist">Owner</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          )
+
+            {playlists.length === 0 ? (
+              <EmptyState noun="playlists" query={query.trim()} onClearQuery={() => setQuery("")} />
+            ) : (
+              <div className="flex flex-col gap-3">
+                {hiddenPlaylistCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowHiddenPlaylists((current) => !current)}
+                    className="flex w-fit items-center gap-1.5 rounded-full bg-card/70 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {showHiddenPlaylists ? <EyeClosedIcon size={14} /> : <EyeIcon size={14} />}
+                    {showHiddenPlaylists
+                      ? "Hide the hidden playlists"
+                      : `Show ${hiddenPlaylistCount} hidden`}
+                  </button>
+                )}
+                {displayedPlaylists.length === 0 ? (
+                  <p className="px-2 py-16 text-center text-sm text-muted-foreground">
+                    All your playlists are hidden.
+                  </p>
+                ) : (
+                  <div className={GRID}>
+                    {displayedPlaylists.map((playlist) => (
+                      <div
+                        key={playlist.id}
+                        className={hiddenPlaylistIdSet.has(playlist.id) ? "opacity-40" : undefined}
+                      >
+                        <AlbumCard
+                          artworkUrl={
+                            isLikedSongsId(playlist.id, playlist.kind)
+                              ? likedSongsCover
+                              : playlist.artworkUrl
+                          }
+                          title={playlist.title}
+                          subtitle={playlist.owner}
+                          onClick={() => onOpenPlaylist(playlist)}
+                          onContextMenu={(event) => openPlaylistMenu(event, playlist)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {/* 4. ALBUMS OPTION */}
         {tab === "albums" && (
-          albums.length === 0 ? (
-            <EmptyState noun="albums" query={query.trim()} onClearQuery={() => setQuery("")} />
-          ) : (
-            <div className={GRID}>
-              {albums.map((album) => (
-                <AlbumCard
-                  key={album.id}
-                  artworkUrl={isLikedSongsId(album.id) ? likedSongsCover : album.artworkUrl}
-                  title={album.title}
-                  subtitle={album.artist}
-                  onClick={() => onOpenAlbum(album)}
-                  onContextMenu={(event) => openAlbumMenu(event, album)}
+          <div className="flex flex-col gap-4">
+            <div className="flex w-full min-w-0 items-center justify-between gap-2.5">
+              <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full bg-card/70 border border-white/10 px-3.5 text-muted-foreground transition-colors focus-within:bg-card focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring">
+                <SearchIcon size={16} aria-hidden="true" className="shrink-0" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Filter albums..."
+                  aria-label="Filter albums"
+                  className="w-full min-w-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
                 />
-              ))}
+                {isFiltering && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    aria-label="Clear filter"
+                    className="shrink-0 rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <CloseIcon size={14} />
+                  </button>
+                )}
+              </label>
+
+              <Select
+                className="w-auto shrink-0"
+                value={activeSort}
+                onValueChange={(value) => setSort(value as LibrarySort)}
+              >
+                <SelectTrigger
+                  className="h-10 rounded-full border border-white/10 bg-card/70 px-3.5 text-sm whitespace-nowrap gap-2 hover:bg-card"
+                  aria-label="Sort albums"
+                >
+                  <SelectValue className="truncate whitespace-nowrap" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recent">Recently added</SelectItem>
+                  <SelectItem value="title">Title</SelectItem>
+                  <SelectItem value="artist">Artist</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          )
+
+            {albums.length === 0 ? (
+              <EmptyState noun="albums" query={query.trim()} onClearQuery={() => setQuery("")} />
+            ) : (
+              <div className={GRID}>
+                {albums.map((album) => (
+                  <AlbumCard
+                    key={album.id}
+                    artworkUrl={isLikedSongsId(album.id) ? likedSongsCover : album.artworkUrl}
+                    title={album.title}
+                    subtitle={album.artist}
+                    onClick={() => onOpenAlbum(album)}
+                    onContextMenu={(event) => openAlbumMenu(event, album)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
 

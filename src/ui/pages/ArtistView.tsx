@@ -1,5 +1,6 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { cn } from "@/lib/utils";
 import { SpinnerSteps } from "@/components/motion/loader";
 import { CheckIcon, ShareIcon, UserPlusIcon } from "@/ui/icons";
 import {
@@ -164,7 +165,6 @@ export function ArtistView({
       .filter((type) => type === "all" || releaseTypes.has(type)),
     [releaseTypes],
   );
-  const activeFilterIndex = Math.max(0, releaseFilters.indexOf(filter));
   const visibleReleases = page?.releases.filter(
     (release) => filter === "all" || release.releaseType === filter,
   ) ?? [];
@@ -483,24 +483,26 @@ export function ArtistView({
 
           {page.releases.length > 0 && (
             <section className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-3">
-                <h2>Releases</h2>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 w-full">
+                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Releases</h2>
                 <div
-                  className="flex flex-wrap items-center gap-1.5 self-start [&>button]:flex [&>button]:min-h-8 [&>button]:min-w-0 [&>button]:items-center [&>button]:justify-center [&>button]:gap-1.5 [&>button]:rounded-full [&>button]:bg-white/[0.04] [&>button]:px-3 [&>button]:text-sm [&>button]:font-medium [&>button]:text-muted-foreground [&>button]:transition-colors hover:[&>button]:bg-white/[0.08] hover:[&>button]:text-foreground focus-visible:[&>button]:outline-none focus-visible:[&>button]:ring-2 focus-visible:[&>button]:ring-ring"
+                  className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]"
                   role="group"
                   aria-label="Release type"
-                  style={{
-                    "--active-filter-offset": `${activeFilterIndex * 100}%`,
-                    "--filter-count": releaseFilters.length,
-                  } as CSSProperties}
                 >
-                  {releaseFilters
-                    .map((type) => (
+                  {releaseFilters.map((type) => {
+                    const isActive = filter === type;
+                    return (
                       <button
                         key={type}
                         type="button"
-                        className={filter === type ? "bg-primary/15 text-foreground" : ""}
-                        aria-pressed={filter === type}
+                        className={cn(
+                          "h-8 shrink-0 flex items-center justify-center rounded-full px-3.5 text-xs sm:text-sm font-medium transition-all select-none border",
+                          isActive
+                            ? "bg-primary text-primary-foreground border-primary font-semibold shadow-sm"
+                            : "bg-white/[0.04] border-white/[0.08] text-muted-foreground hover:bg-white/[0.08] hover:text-foreground active:scale-95",
+                        )}
+                        aria-pressed={isActive}
                         onClick={() => setFilter(type)}
                       >
                         {type === "all"
@@ -509,10 +511,11 @@ export function ArtistView({
                             ? "EPs"
                             : `${type[0].toUpperCase()}${type.slice(1)}s`}
                       </button>
-                    ))}
+                    );
+                  })}
                 </div>
               </div>
-              <div key={filter} className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(9.5rem,1fr))] grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(9.5rem,1fr))]">
+              <div key={filter} className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:[grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr))] sm:gap-4">
                 {visibleReleases.map((release) => {
                   const hasLinkedArtists = Boolean(release.artists?.length);
                   return (
