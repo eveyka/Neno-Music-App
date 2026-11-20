@@ -783,16 +783,16 @@ export function HomePage({
       </div>
 
       {isMobile ? (
-        <div className="flex w-full gap-2.5 sm:gap-3 overflow-x-auto no-scrollbar snap-x py-1 px-0.5 [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
+        <div className="flex w-full gap-2.5 sm:gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-px-4 py-1 px-1 [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain">
           {isLoadingSuggestions ? (
             Array.from({ length: 5 }, (_, index) => (
-              <div key={index} className="w-32 sm:w-36 shrink-0 aspect-[3/4] snap-start">
+              <div key={index} className="w-32 sm:w-36 shrink-0 aspect-[3/4] snap-center">
                 <PickCardSkeleton />
               </div>
             ))
           ) : (
             <>
-              <div className="w-32 sm:w-36 shrink-0 aspect-[3/4] snap-start">
+              <div className="w-32 sm:w-36 shrink-0 aspect-[3/4] snap-center">
                 <DiceCard
                   tracks={surpriseSuggestions}
                   isSpinning={isSurpriseSpinning}
@@ -800,7 +800,7 @@ export function HomePage({
                 />
               </div>
               {topSuggestions.map((track) => (
-                <div key={track.id} className="w-32 sm:w-36 shrink-0 aspect-[3/4] snap-start">
+                <div key={track.id} className="w-32 sm:w-36 shrink-0 aspect-[3/4] snap-center">
                   <PickCard
                     artworkUrl={track.artworkUrl}
                     title={track.title}
@@ -883,7 +883,7 @@ export function HomePage({
         )}
 
         {/* YouTube Music Style Filter Pills */}
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar snap-x [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar snap-x snap-proximity scroll-px-4 [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {(() => {
             // If YouTube Music provided dynamic chips in the home feed, use them!
             const dynamicChips = persistentHomeFeed?.headerChips ?? ytmHomeFeed?.headerChips;
@@ -896,7 +896,7 @@ export function HomePage({
                     type="button"
                     onClick={() => void handleMoodSelect(chip.title, chip)}
                     className={cn(
-                      "shrink-0 snap-start rounded-lg px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 cursor-pointer select-none border",
+                      "shrink-0 snap-center rounded-lg px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 cursor-pointer select-none border",
                       isSelected
                         ? "bg-white text-black border-white shadow-sm font-bold"
                         : "bg-white/[0.08] hover:bg-white/[0.14] text-white/90 border-white/[0.08]",
@@ -917,7 +917,7 @@ export function HomePage({
                   type="button"
                   onClick={() => void handleMoodSelect(mood.id)}
                   className={cn(
-                    "shrink-0 snap-start rounded-lg px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 cursor-pointer select-none border",
+                    "shrink-0 snap-center rounded-lg px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 cursor-pointer select-none border",
                     isSelected
                       ? "bg-white text-black border-white shadow-sm font-bold"
                       : "bg-white/[0.08] hover:bg-white/[0.14] text-white/90 border-white/[0.08]",
@@ -950,7 +950,7 @@ export function HomePage({
       {/* ── 1. Topmost: Daily Discover Songs (Direct songs, NO title) ─────── */}
       <section className="w-full">
         {dailyDiscoverTracks.length > 0 ? (
-          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-proximity no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
+          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain">
             {dailyDiscoverTracks.map((track) => (
               <DailyDiscoverCard
                 key={track.id}
@@ -960,11 +960,11 @@ export function HomePage({
             ))}
           </div>
         ) : (isLoadingHomeFeed || isLoadingSuggestions || isWaitingForLibrary) ? (
-          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 no-scrollbar">
+          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar overscroll-x-contain">
             {Array.from({ length: 3 }).map((_, i) => (
               <div
                 key={i}
-                className="w-[84vw] max-w-[340px] aspect-[4/5] min-h-[340px] shrink-0 rounded-3xl overflow-hidden bg-neutral-900/60 border border-white/10 relative"
+                className="w-[84vw] max-w-[340px] aspect-[4/5] min-h-[340px] shrink-0 snap-center rounded-3xl overflow-hidden bg-neutral-900/60 border border-white/10 relative"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent animate-pulse" />
                 <div className="absolute bottom-6 left-6 right-6 flex flex-col gap-2">

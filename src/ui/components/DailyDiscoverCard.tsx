@@ -41,7 +41,7 @@ export const DailyDiscoverCard = memo(function DailyDiscoverCard({
         }
       }}
       className={cn(
-        "group/discover relative w-[84vw] max-w-[340px] aspect-[4/5] min-h-[340px] shrink-0 snap-start",
+        "group/discover relative w-[84vw] max-w-[340px] aspect-[4/5] min-h-[340px] shrink-0 snap-center",
         "rounded-3xl overflow-hidden bg-neutral-900 border border-white/10 shadow-2xl",
         "select-none cursor-pointer transition-transform duration-300 active:scale-98",
         className,

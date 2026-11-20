@@ -140,10 +140,10 @@ export const SpeedDialSection = memo(function SpeedDialSection({
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex w-full overflow-x-auto snap-x snap-proximity no-scrollbar [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex w-full overflow-x-auto snap-x snap-mandatory scroll-px-0 no-scrollbar [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {isLoading ? (
-            <div className="w-full shrink-0 snap-start grid grid-cols-3 grid-rows-3 gap-2 sm:gap-3">
+            <div className="w-full shrink-0 snap-center grid grid-cols-3 grid-rows-3 gap-2 sm:gap-3">
               {Array.from({ length: ITEMS_PER_PAGE }).map((_, index) => (
                 <div
                   key={index}
@@ -155,7 +155,7 @@ export const SpeedDialSection = memo(function SpeedDialSection({
             pages.map((pageItems, pageIdx) => (
               <div
                 key={`speed-dial-page-${pageIdx}`}
-                className="w-full shrink-0 snap-start grid grid-cols-3 grid-rows-3 gap-2 sm:gap-3"
+                className="w-full shrink-0 snap-center grid grid-cols-3 grid-rows-3 gap-2 sm:gap-3"
               >
                 {pageItems.map((entry, entryIdx) => {
                   const isTrack = entry.kind === "track";

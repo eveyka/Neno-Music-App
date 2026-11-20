@@ -86,7 +86,7 @@ export const CommunityPlaylistCard = memo(function CommunityPlaylistCard({
     <div
       onClick={() => onOpenPlaylist(playlist)}
       className={cn(
-        "group/card w-[84vw] max-w-[340px] shrink-0 snap-start rounded-3xl",
+        "group/card w-[84vw] max-w-[340px] shrink-0 snap-center rounded-3xl",
         "bg-[#18181a] border border-white/[0.08] hover:border-white/[0.18]",
         "p-4 sm:p-5 flex flex-col gap-3.5 shadow-xl transition-all duration-200 select-none cursor-pointer",
         className,
