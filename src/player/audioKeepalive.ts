@@ -21,7 +21,6 @@
 
 import { useEffect, useRef } from "react";
 import { usePlayerSelector } from "./playerStore";
-import { isAndroidEnvironment } from "./androidMediaBridge";
 
 /**
  * Creates a valid 1-second 8000Hz 8-bit mono silent WAV blob URL.
@@ -161,14 +160,11 @@ function getOrCreateKeepaliveAudio(): HTMLAudioElement | null {
 
 export function startAudioKeepalive(): void {
   // 1. Web Audio API keepalive: Runs on Android & Desktop.
-  // It marks the WebView as producing audio in Chromium, preventing V8 renderer
-  // freezing in background, without requesting AudioManager focus on Android.
   startWebAudioKeepalive();
 
-  // 2. HTML5 audio keepalive: Used on desktop. On Android, HTML5 audio
-  // competes with Android AudioManager, so we only use Web Audio there.
-  if (isAndroidEnvironment()) return;
-
+  // 2. HTML5 audio keepalive: Runs a looping inaudible silent audio element.
+  // In Chromium and Android WebView, an active HTML5 media element is essential to
+  // prevent the renderer process and timers from being frozen during background playback.
   try {
     const audio = getOrCreateKeepaliveAudio();
     if (!audio) return;

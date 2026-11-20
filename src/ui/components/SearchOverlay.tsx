@@ -920,7 +920,7 @@ export function SearchOverlay({
                   <span className="text-[11px] font-bold uppercase tracking-wider text-white/50 px-1">
                     Artists
                   </span>
-                  <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar overscroll-x-contain">
+                  <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
                     {searchResults.artists.map((artist) => (
                       <button
                         key={artist.id}
@@ -984,7 +984,7 @@ export function SearchOverlay({
 
                   {/* Horizontal Carousel of Searched Media Items (tracks/artists/albums clicked from search) */}
                   {searchedMediaItems.length > 0 && (
-                    <div className="flex gap-3 overflow-x-auto pb-2 pt-1 no-scrollbar overscroll-x-contain -mx-1 px-1">
+                    <div className="flex gap-3 overflow-x-auto pb-2 pt-1 no-scrollbar [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] -mx-1 px-1">
                       {searchedMediaItems.map((item) => (
                         <button
                           key={item.id}

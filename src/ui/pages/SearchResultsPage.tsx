@@ -361,7 +361,7 @@ export function SearchResultsPage({
         {/* Filter Pills - Horizontally scrollable for mobile phone users */}
         {availableScopes.length > 2 && (
           <div
-            className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar overscroll-x-contain select-none"
+            className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]"
             role="tablist"
             aria-label="Filter results"
           >

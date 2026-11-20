@@ -237,6 +237,15 @@ struct Fade {
     outgoing: usize,
 }
 
+/// A preload request held while a crossfade is still using the standby deck for the outgoing track.
+struct PendingStandby {
+    track_id: String,
+    source: BoxedSource,
+    duration: f64,
+    health: Option<DeckHealth>,
+    reply: Sender<Result<f64, String>>,
+}
+
 pub(crate) enum Command {
     Load {
         track_id: String,
@@ -736,6 +745,7 @@ fn run(
         rate: 1.0,
         playing: false,
         fade: None,
+        pending_standby: None,
     };
 
     if ready.send(Ok(())).is_err() {
@@ -779,6 +789,7 @@ struct Engine {
     rate: f32,
     playing: bool,
     fade: Option<Fade>,
+    pending_standby: Option<PendingStandby>,
 }
 
 impl Engine {
@@ -794,6 +805,23 @@ impl Engine {
         }
     }
 
+    fn apply_pending_standby(&mut self) {
+        if let Some(pending) = self.pending_standby.take() {
+            let standby = self.standby();
+            let rate = self.rate;
+            let deck = &mut self.decks[standby];
+            deck.sink.stop();
+            deck.sink.pause();
+            deck.sink.set_volume(0.0);
+            deck.sink.set_speed(rate);
+            deck.sink.append(pending.source);
+            deck.track_id = Some(pending.track_id);
+            deck.duration_sec = pending.duration;
+            deck.health = pending.health;
+            let _ = pending.reply.send(Ok(pending.duration));
+        }
+    }
+
     /// Returns true when the thread should stop.
     fn handle(&mut self, command: Command) -> bool {
         match command {
@@ -806,16 +834,33 @@ impl Engine {
                 health,
                 reply,
             } => {
+                let duration = decoded_duration_sec
+                    .filter(|value| *value > 0.0)
+                    .unwrap_or(fallback_duration_sec)
+                    .max(0.0);
+
+                /*
+                 * The standby deck is actively playing the outgoing track during a crossfade.
+                 * Loading onto it now would stop the outgoing track mid-fade and clear it when
+                 * the fade finishes. Hold the request until the crossfade closes, then load it.
+                 */
+                if standby && self.fade.is_some() {
+                    self.pending_standby = Some(PendingStandby {
+                        track_id,
+                        source,
+                        duration,
+                        health,
+                        reply,
+                    });
+                    return false;
+                }
+
                 let index = if standby { self.standby() } else { self.active };
                 if !standby {
                     // A fade against a deck that is being reloaded would ramp a track that is
                     // no longer there.
                     self.cancel_fade();
                 }
-                let duration = decoded_duration_sec
-                    .filter(|value| *value > 0.0)
-                    .unwrap_or(fallback_duration_sec)
-                    .max(0.0);
 
                 /*
                  * The standby is silent until a transition ramps it up. A deck that inherited
@@ -827,10 +872,10 @@ impl Engine {
 
                 let deck = &mut self.decks[index];
                 deck.sink.stop();
-                deck.sink.append(source);
                 deck.sink.pause();
                 deck.sink.set_volume(volume);
                 deck.sink.set_speed(rate);
+                deck.sink.append(source);
                 deck.track_id = Some(track_id);
                 deck.duration_sec = duration;
                 deck.health = health;
@@ -856,14 +901,21 @@ impl Engine {
                     deck.sink.set_volume(volume);
                 }
                 deck.sink.play();
+                if let Some(fade) = &self.fade {
+                    self.decks[fade.outgoing].sink.play();
+                }
                 self.playing = true;
                 let _ = reply.send(Ok(()));
             }
             Command::Pause => {
                 self.decks[self.active].sink.pause();
+                if let Some(fade) = &self.fade {
+                    self.decks[fade.outgoing].sink.pause();
+                }
                 self.playing = false;
             }
             Command::Stop => {
+                self.pending_standby = None;
                 self.cancel_fade();
                 for deck in &mut self.decks {
                     deck.clear();
@@ -891,6 +943,11 @@ impl Engine {
                 }
             }
             Command::Transition { track_id, fade_ms, reply } => {
+                if let Some(pending) = &self.pending_standby {
+                    if pending.track_id == track_id {
+                        self.apply_pending_standby();
+                    }
+                }
                 let standby = self.standby();
                 if self.decks[standby].track_id.as_deref() != Some(track_id.as_str()) {
                     let _ = reply.send(false);
@@ -938,14 +995,16 @@ impl Engine {
             }
             Command::HasStandby { track_id, reply } => {
                 let standby = self.standby();
-                let matched = self.decks[standby].track_id.as_deref() == Some(track_id.as_str());
+                let is_loaded = self.decks[standby].track_id.as_deref() == Some(track_id.as_str());
+                let is_pending = self.pending_standby.as_ref().map(|p| p.track_id.as_str()) == Some(track_id.as_str());
+                let matched = is_loaded || is_pending;
                 /*
                  * A preloaded deck whose download died is worse than no preload at all: the
                  * caller would skip stream resolution, hand over gaplessly, and play the few
                  * seconds that did arrive. Reporting it as absent sends the caller down the
                  * normal load path, which resolves a fresh URL.
                  */
-                if matched && !self.decks[standby].is_healthy() {
+                if is_loaded && !self.decks[standby].is_healthy() {
                     eprintln!(
                         "[internal][tauri][warn] native_audio standby discarded, download failed track_id={}",
                         track_id
@@ -957,8 +1016,11 @@ impl Engine {
                 let _ = reply.send(matched);
             }
             Command::DropStandby => {
-                let standby = self.standby();
-                self.decks[standby].clear();
+                self.pending_standby = None;
+                if self.fade.is_none() {
+                    let standby = self.standby();
+                    self.decks[standby].clear();
+                }
             }
             Command::DropActive => {
                 // A fade reads the active deck's volume every tick; cancel it first, or the
@@ -969,6 +1031,7 @@ impl Engine {
             }
             Command::SetOutputDevice { id, reply } => {
                 // Cancel any in-progress crossfade
+                self.pending_standby = None;
                 self.fade = None;
                 for deck in &mut self.decks {
                     deck.clear();
@@ -1012,9 +1075,11 @@ impl Engine {
     }
 
     fn cancel_fade(&mut self) {
-        if self.fade.take().is_some() {
+        if let Some(fade) = self.fade.take() {
             let volume = self.output_volume();
             self.decks[self.active].sink.set_volume(volume);
+            self.decks[fade.outgoing].clear();
+            self.apply_pending_standby();
         }
     }
 
@@ -1043,6 +1108,7 @@ impl Engine {
             self.fade = None;
             self.decks[outgoing].clear();
             self.decks[self.active].sink.set_volume(target);
+            self.apply_pending_standby();
         }
     }
 

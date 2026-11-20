@@ -438,7 +438,7 @@ export function ArtistView({
           {popularSongs.length > 0 && (
             <section className="flex flex-col gap-3">
               <h2>Popular</h2>
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-2 sm:gap-2.5">
                 {popularSongs.map((track, index) => (
                   <TrackRow
                     key={track.id}

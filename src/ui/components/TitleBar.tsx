@@ -29,7 +29,7 @@ import { FloatingPanel } from "./FloatingPanel";
 import { NotificationsPanel } from "./NotificationsPanel";
 import { useToolbarItemVisible } from "../settings/toolbarItems";
 import { AnimatePresence, motion } from "motion/react";
-import appIcon from "../../../assets/img/Logo.png";
+import appIcon from "../../../assets/Header-PNG.png";
 
 interface TitleBarProps {
   tabs: Tab[];
@@ -208,7 +208,7 @@ export function TitleBar({
           initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ type: "spring", stiffness: 260, damping: 24 }}
-          className="size-6 "
+          className="size-6 object-contain"
           src={appIcon}
           alt=""
         /> 

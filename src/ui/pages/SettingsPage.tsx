@@ -1119,7 +1119,7 @@ export function SettingsPage({
       </header>
 
       {/* Mobile horizontal pill navigation */}
-      <div className="flex w-full items-center gap-2 overflow-x-auto no-scrollbar pb-1 pt-0.5 md:hidden">
+      <div className="flex w-full items-center gap-2 overflow-x-auto no-scrollbar pb-1 pt-0.5 md:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
         {SETTINGS_TABS.filter((tab) => !isMobile || (tab.id !== "window" && tab.id !== "shortcuts")).map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;

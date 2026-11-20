@@ -822,7 +822,7 @@ export function PlaylistView({ playlist, playerController, libraryController }: 
       {!error && (isLoading || tracks.length > 0 || hasMoreTracks) && (
         <>
           <div
-            className="flex items-center gap-1.5 sm:gap-2 w-full overflow-x-auto no-scrollbar py-1 self-start"
+            className="flex items-center gap-1.5 sm:gap-2 w-full overflow-x-auto no-scrollbar py-1 self-start [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]"
             role="group"
             aria-label="Playlist song tools"
           >
@@ -896,7 +896,7 @@ export function PlaylistView({ playlist, playerController, libraryController }: 
           ) : visibleTracks.length === 0 && playlistSearchQuery.trim() ? (
             <p className="px-2 py-10 text-center text-sm text-muted-foreground">No songs match this search.</p>
           ) : (
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-2 sm:gap-2.5">
             {visibleTracks.map((track, index) => {
               const trackPath = track.localPath ?? track.playlistItemId ?? track.id;
               /*

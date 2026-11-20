@@ -1,4 +1,4 @@
-import { logInternalError, logInternalInfo, logInternalWarn } from "../internal/logging";
+import { logInternalDebug, logInternalError, logInternalInfo, logInternalWarn } from "../internal/logging";
 import {
   AUDIO_ENGINE_MODE_CHANGE_EVENT,
   usesNativeAudioEngine,
@@ -294,9 +294,11 @@ export class AudioEngine {
    * would set volumes on a deck that had already been torn down.
    */
   private fadeIntervalId: number | null = null;
+  private crossfadeActive = false;
+  private crossfadeTimerId: number | null = null;
   private muted = false;
   private playbackRate = 1;
-  private onEnded: (() => void) | null = null;
+  private onEnded: ((isNaturalEnd?: boolean) => void) | null = null;
   private endedAt: { positionSec: number; durationSec: number } | null = null;
   private loadRequestId = 0;
   private stateWaiters = new Set<{
@@ -313,6 +315,10 @@ export class AudioEngine {
 
   usesNativeAudio(): boolean {
     return this.useNativeAudio;
+  }
+
+  isCrossfading(): boolean {
+    return this.crossfadeActive;
   }
 
   usesRustAudio(): boolean {
@@ -440,7 +446,7 @@ export class AudioEngine {
     await this.loadNativeAudio(videoId, audioData, mimeType, sourceUrl);
   }
 
-  setOnEnded(listener: (() => void) | null): void {
+  setOnEnded(listener: ((isNaturalEnd?: boolean) => void) | null): void {
     this.onEnded = listener;
   }
 
@@ -450,7 +456,7 @@ export class AudioEngine {
     // caller cannot tell a finished track from a stream that ran out.
     this.endedAt = { positionSec: this.getCurrentTime(), durationSec: this.getDuration() };
     this.rustTrackId = null;
-    this.onEnded?.();
+    this.onEnded?.(true);
   }
 
   /** Position and duration as of the last `ended`. Consumed once. */
@@ -463,7 +469,7 @@ export class AudioEngine {
   /** The `<audio>` and IFrame equivalent of `handleRustEnded`: snapshot, then notify. */
   private emitEnded(): void {
     this.endedAt = { positionSec: this.getCurrentTime(), durationSec: this.getDuration() };
-    this.onEnded?.();
+    this.onEnded?.(true);
   }
 
   async play(): Promise<boolean> {
@@ -819,6 +825,10 @@ export class AudioEngine {
   ): Promise<void> {
     if (!this.useRustAudio || !trackId || trackId === this.rustTrackId) return;
     if (this.rustStandbyTrackId === trackId) return;
+    if (this.crossfadeActive) {
+      logInternalDebug("AudioEngine.preloadRustTrack deferred, crossfade active", { trackId });
+      return;
+    }
 
     routeRustEnded();
     try {
@@ -845,6 +855,10 @@ export class AudioEngine {
   ): Promise<void> {
     if (!videoId || videoId === this.currentVideoId) return;
     if (this.standbyNativeVideoId === videoId && this.standbyAudio) return;
+    if (this.crossfadeActive) {
+      logInternalDebug("AudioEngine.preloadNativeAudio deferred, crossfade active", { videoId });
+      return;
+    }
 
     this.releaseStandbyNativeAudio();
 
@@ -901,6 +915,11 @@ export class AudioEngine {
     if (this.nativeFadeIntervalId !== null) {
       window.clearInterval(this.nativeFadeIntervalId);
       this.nativeFadeIntervalId = null;
+    }
+    this.crossfadeActive = false;
+    if (this.crossfadeTimerId !== null) {
+      window.clearTimeout(this.crossfadeTimerId);
+      this.crossfadeTimerId = null;
     }
     if (this.audio) {
       this.audio.volume = this.muted ? 0 : this.volume;
@@ -979,6 +998,12 @@ export class AudioEngine {
       }
 
       if (fadeMs > 0 && outgoing) {
+        this.crossfadeActive = true;
+        if (this.crossfadeTimerId !== null) window.clearTimeout(this.crossfadeTimerId);
+        this.crossfadeTimerId = window.setTimeout(() => {
+          this.crossfadeActive = false;
+          this.crossfadeTimerId = null;
+        }, fadeMs + 200);
         void this.rampNativeAudioAcross(outgoing, incoming, targetVolume, fadeMs, outgoingUrl);
       } else if (outgoing) {
         outgoing.pause();
@@ -1009,6 +1034,14 @@ export class AudioEngine {
       this.currentVideoId = videoId;
       this.loadRequestId += 1;
       rustAudio.adoptTransitioned(videoId, this.rustDurationSec);
+      if (fadeMs > 0) {
+        this.crossfadeActive = true;
+        if (this.crossfadeTimerId !== null) window.clearTimeout(this.crossfadeTimerId);
+        this.crossfadeTimerId = window.setTimeout(() => {
+          this.crossfadeActive = false;
+          this.crossfadeTimerId = null;
+        }, fadeMs + 200);
+      }
       logInternalInfo("AudioEngine.transitionToPreloaded rust", { videoId, fadeMs });
       return true;
     }
@@ -1032,6 +1065,14 @@ export class AudioEngine {
       this.currentVideoId = videoId;
       this.loadRequestId += 1;
       rustAudio.adoptTransitioned(videoId, this.rustDurationSec);
+      if (fadeMs > 0) {
+        this.crossfadeActive = true;
+        if (this.crossfadeTimerId !== null) window.clearTimeout(this.crossfadeTimerId);
+        this.crossfadeTimerId = window.setTimeout(() => {
+          this.crossfadeActive = false;
+          this.crossfadeTimerId = null;
+        }, fadeMs + 200);
+      }
 
       if (fadeMs > 0 && outgoing) {
         const targetVolume = this.muted ? 0 : this.volume;
@@ -1228,6 +1269,11 @@ export class AudioEngine {
     if (this.fadeIntervalId !== null) {
       window.clearInterval(this.fadeIntervalId);
       this.fadeIntervalId = null;
+    }
+    this.crossfadeActive = false;
+    if (this.crossfadeTimerId !== null) {
+      window.clearTimeout(this.crossfadeTimerId);
+      this.crossfadeTimerId = null;
     }
   }
 

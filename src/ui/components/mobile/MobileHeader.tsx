@@ -2,7 +2,7 @@ import { useState, memo } from "react";
 import { motion } from "motion/react";
 import { RefreshIcon, SearchIcon } from "@/ui/icons";
 import { cn } from "@/lib/utils";
-import appIcon from "../../../../assets/img/Logo.png";
+import appIcon from "../../../../assets/Header-PNG.png";
 import { useLibraryState } from "../../../player/playerStore";
 import { AccountAvatar } from "../AccountSwitcher";
 import { GoogleSignInButton } from "../GoogleSignInButton";
@@ -45,16 +45,19 @@ function MobileHeaderInner({
   };
 
   return (
-    <header className="sticky top-0 z-20 w-full mb-2 flex h-13 items-center justify-between gap-2 bg-background px-2.5 py-1.5 transition-colors border-b border-white/10 overflow-hidden">
+    <header className="sticky top-0 z-20 w-full mb-2 flex h-13 items-center justify-between gap-2 bg-background px-2.5 py-1.5 transition-colors overflow-hidden">
       {/* Brand Identity */}
       <motion.div
         whileTap={{ scale: 0.95 }}
         transition={{ type: "spring", stiffness: 400, damping: 25 }}
         className="flex items-center gap-2 cursor-pointer select-none shrink-0"
       >
-        <div className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-card border border-white/10 shadow-xs">
-          <img src={appIcon} alt="Neno" className="size-5.5 object-contain" />
-        </div>
+        <img
+          src={appIcon}
+          alt="Neno"
+          className="size-8 object-contain shrink-0 select-none drop-shadow-md"
+          draggable={false}
+        />
         <div className="flex items-center gap-1.5">
           <span className="text-[15px] font-extrabold tracking-tight text-foreground leading-none">
             Neno

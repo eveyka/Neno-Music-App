@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Tooltip } from "@/components/motion/tooltip";
-import { CheckIcon, DownloadIcon, ListIcon, PauseActiveIcon, PlayActiveIcon, PlaylistAddIcon, RepeatActiveIcon, RepeatOneActiveIcon, ShuffleActiveIcon } from "@/ui/icons";
+import { CheckIcon, CloseIcon, DownloadIcon, ListIcon, PauseActiveIcon, PlayActiveIcon, PlaylistAddIcon, RepeatActiveIcon, RepeatOneActiveIcon, SearchIcon, ShuffleActiveIcon } from "@/ui/icons";
 import { SpinnerSteps } from "@/components/motion/loader";
 import { TrackArtwork } from "./TrackArtwork";
 import { setAmbientArtwork } from "../stores/ambientArtworkStore";
@@ -103,6 +103,17 @@ interface MediaHeaderProps {
     mode?: "in-order" | "repeat-all" | "repeat-one";
   };
   actionsDisabled?: boolean;
+  /** In-header search tool for this collection */
+  search?: {
+    isOpen?: boolean;
+    onToggle?: () => void;
+    query: string;
+    onQueryChange: (query: string) => void;
+    placeholder?: string;
+    onClear?: () => void;
+    resultCount?: number;
+    inputRef?: React.RefObject<HTMLInputElement | null>;
+  };
   /** Extra controls beside play/shuffle, e.g. Subscribe. */
   actions?: ReactNode;
 }
@@ -136,6 +147,7 @@ export function MediaHeader({
   onAddToPlaylist,
   download,
   loop,
+  search,
   actionsDisabled = false,
   actions,
 }: MediaHeaderProps) {
@@ -241,8 +253,8 @@ export function MediaHeader({
         )}
 
         {/* Tier 2: Secondary Utility Strip */}
-        {(download || onAddToPlaylist || onAddToQueue || loop || actions) && (
-          <div className="flex items-center gap-2.5 w-full pt-0.5 overflow-x-auto no-scrollbar">
+        {(download || onAddToPlaylist || onAddToQueue || loop || search || actions) && (
+          <div className="flex items-center gap-2.5 w-full pt-0.5 overflow-x-auto no-scrollbar [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
             {download ? (() => {
               const total = downloadCounts?.total ?? 0;
               const downloaded = downloadCounts?.downloaded ?? 0;
@@ -315,7 +327,58 @@ export function MediaHeader({
               </button>
             ) : null}
 
+            {search ? (
+              <button
+                type="button"
+                disabled={actionsDisabled}
+                onClick={search.onToggle}
+                aria-label="Search in songs"
+                aria-pressed={search.isOpen || Boolean(search.query)}
+                className={cn(
+                  "flex size-10 shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 disabled:pointer-events-none disabled:opacity-50",
+                  (search.isOpen || Boolean(search.query))
+                    ? "bg-primary/20 text-primary border-primary/40 shadow-sm"
+                    : "bg-card/80 border-white/10 text-foreground hover:bg-muted",
+                )}
+              >
+                <SearchIcon size={17} aria-hidden="true" />
+              </button>
+            ) : null}
+
             {actions}
+          </div>
+        )}
+
+        {/* Animated Expandable Search Bar on Mobile */}
+        {search && (search.isOpen || Boolean(search.query)) && (
+          <div className="flex items-center gap-2.5 w-full rounded-2xl bg-card/90 border border-white/10 px-3.5 py-2 text-sm text-foreground shadow-sm transition-all">
+            <span className="shrink-0 text-muted-foreground">
+              <SearchIcon size={16} aria-hidden="true" />
+            </span>
+            <input
+              ref={search.inputRef}
+              type="text"
+              value={search.query}
+              aria-label={search.placeholder ?? "Search songs"}
+              placeholder={search.placeholder ?? "Search songs..."}
+              className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              onChange={(e) => search.onQueryChange(e.target.value)}
+            />
+            {typeof search.resultCount === "number" && Boolean(search.query) && (
+              <span className="shrink-0 text-xs font-semibold text-muted-foreground/80 tabular-nums">
+                {search.resultCount} found
+              </span>
+            )}
+            {Boolean(search.query) && (
+              <button
+                type="button"
+                onClick={search.onClear ?? (() => search.onQueryChange(""))}
+                className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground active:scale-90 transition-transform"
+                aria-label="Clear search"
+              >
+                <CloseIcon size={14} aria-hidden="true" />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -447,8 +510,61 @@ export function MediaHeader({
             );
           })() : null}
 
+          {search ? (
+            <Tooltip content="Search in songs">
+              <button
+                type="button"
+                disabled={actionsDisabled}
+                onClick={search.onToggle}
+                aria-label="Search in songs"
+                aria-pressed={search.isOpen || Boolean(search.query)}
+                className={cn(
+                  "relative flex size-11 items-center justify-center rounded-full transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  (search.isOpen || Boolean(search.query))
+                    ? "bg-primary/20 text-primary ring-1 ring-primary/40 shadow-sm"
+                    : "bg-card text-foreground hover:bg-muted",
+                )}
+              >
+                <SearchIcon size={18} aria-hidden="true" />
+              </button>
+            </Tooltip>
+          ) : null}
+
           {actions}
         </div>
+
+        {/* Animated Expandable Search Bar on Desktop */}
+        {search && (search.isOpen || Boolean(search.query)) && (
+          <div className="hidden sm:flex items-center gap-2.5 max-w-md w-full rounded-2xl bg-card/90 border border-white/10 px-3.5 py-2 text-sm text-foreground shadow-sm transition-all">
+            <span className="shrink-0 text-muted-foreground">
+              <SearchIcon size={16} aria-hidden="true" />
+            </span>
+            <input
+              ref={search.inputRef}
+              type="text"
+              value={search.query}
+              aria-label={search.placeholder ?? "Search songs"}
+              placeholder={search.placeholder ?? "Search songs..."}
+              className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              onChange={(e) => search.onQueryChange(e.target.value)}
+            />
+            {typeof search.resultCount === "number" && Boolean(search.query) && (
+              <span className="shrink-0 text-xs font-semibold text-muted-foreground/80 tabular-nums">
+                {search.resultCount} found
+              </span>
+            )}
+            {Boolean(search.query) && (
+              <button
+                type="button"
+                onClick={search.onClear ?? (() => search.onQueryChange(""))}
+                className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground active:scale-90 transition-transform"
+                aria-label="Clear search"
+              >
+                <CloseIcon size={14} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        )}
     </header>
   );
 }

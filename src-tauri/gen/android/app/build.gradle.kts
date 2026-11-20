@@ -21,8 +21,8 @@ android {
         applicationId = "com.neno.desktop"
         minSdk = 26
         targetSdk = 36
-        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "13").toInt()
-        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.13")
+        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "14").toInt()
+        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.14")
     }
     buildTypes {
         getByName("debug") {

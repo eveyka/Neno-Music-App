@@ -242,8 +242,8 @@ export class PlayerController {
 
   constructor(private readonly dataSource: DataSource) {
     this.applyPlaybackSettings(readPlaybackSettings(), false);
-    this.audioEngine.setOnEnded(() => {
-      void this.handleTrackEnded();
+    this.audioEngine.setOnEnded((isNaturalEnd = false) => {
+      void this.handleTrackEnded(isNaturalEnd);
     });
   }
 
@@ -544,11 +544,12 @@ export class PlayerController {
 
       // Warm the next track shortly after current playback has successfully started,
       // so the standby deck is decoded and buffered in advance for seamless gapless and crossfade.
+      const warmDelay = this.crossfadeSec > 0 ? Math.max(1000, this.crossfadeSec * 1000 + 300) : 1000;
       globalThis.setTimeout(() => {
         if (this.state.status === "playing" && this.loadedTrackId === track.id) {
           this.warmNextTrack();
         }
-      }, 3000);
+      }, warmDelay);
 
       return true;
     } catch (error) {
@@ -1436,7 +1437,15 @@ export class PlayerController {
            * became active would have nothing queued behind it and the next track would load
            * from cold — the first gapless handover would also be the last.
            */
-          this.warmNextTrack();
+          if (fadeMs > 0) {
+            globalThis.setTimeout(() => {
+              if (this.state.status === "playing" && this.loadedTrackId === track.id) {
+                this.warmNextTrack();
+              }
+            }, fadeMs + 300);
+          } else {
+            this.warmNextTrack();
+          }
           this.beginPlayReport(track);
           return;
         }
@@ -1930,7 +1939,14 @@ export class PlayerController {
    */
   checkBackgroundTrackEnded(): void {
     if (this.state.status !== "playing" || this.handlingTrackEnd || this.transitioning) return;
-    const duration = this.audioEngine.getDuration();
+    const ended = this.audioEngine.takeEndedPlayback();
+    if (ended) {
+      logInternalInfo("PlayerController.checkBackgroundTrackEnded detected ended snapshot, advancing", ended);
+      void this.handleTrackEnded(true);
+      return;
+    }
+    const duration =
+      this.audioEngine.getDuration() || (this.state.currentTrack?.durationSec ?? 0);
     const position = this.audioEngine.getCurrentTime();
     if (duration > 0 && position >= Math.max(0, duration - 1.5)) {
       logInternalInfo("PlayerController.checkBackgroundTrackEnded auto-advancing queue in background", {
@@ -2093,7 +2109,7 @@ export class PlayerController {
    */
   private onTransitionTick(): void {
     // `isTabActive` is not checked — see `syncTransitionTicker` above for the rationale.
-    if (this.transitioning || this.state.status !== "playing") return;
+    if (this.transitioning || this.audioEngine.isCrossfading() || this.state.status !== "playing") return;
 
     const duration = this.audioEngine.getDuration();
     const remaining = duration - this.audioEngine.getCurrentTime();

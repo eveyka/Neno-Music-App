@@ -986,7 +986,7 @@ export function HomePage({
               Play all
             </button>
           </div>
-          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
+          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-proximity no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
             {dailyDiscoverTracks.map((track) => (
               <DailyDiscoverCard
                 key={track.id}

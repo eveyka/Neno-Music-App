@@ -23,11 +23,10 @@ import { getAppSetting, setAppSetting } from "./appSettings";
  */
 const SEEN_VERSION_KEY = "release-note-seen-version";
 
-export const RELEASE_NOTE_BODY = `**What's New** — sleek redesign with custom 3D glowing waveform branding and structured Got it action.
-**Offline Storage** — collapsible storage details card with smooth toggle button in your Downloads library.
-**Crossfade Engine** — true dual-deck crossfade now works 100% reliably for both online and offline/downloaded songs.
-**Performance** — lightning-fast response times, 60/120 FPS animations, and parallel build optimizations.
-**In-App Updates** — download and install new versions directly with real-time progress.
+export const RELEASE_NOTE_BODY = `**Crossfade Engine** — smooth dual-deck crossfade transition now plays next tracks seamlessly every time without jumping.
+**Modern Island UI** — revamped song card lists with sleek floating island design, systematic layout, and butter-smooth 60/120 FPS scrolling.
+**Unified Header & Search** — search is seamlessly integrated into the action options bar with instant expand and live filtering.
+**Performance & Size** — ultra-lightweight and fast, optimized Android builds.
 
 Enjoy your listening!`;
 

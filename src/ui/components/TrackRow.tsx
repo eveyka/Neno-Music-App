@@ -431,11 +431,14 @@ export const TrackRow = memo(function TrackRow({
       onContextMenu={onContextMenu ? handleContextMenu : undefined}
       aria-current={isCurrent ? "true" : undefined}
       className={cn(
-        "group/row relative flex w-full items-center gap-3 px-2 py-1.5 text-left rounded-xl",
-        "transition-colors duration-150 hover:bg-card active:scale-[0.985] active:bg-primary/10 focus-visible:outline-none focus-visible:ring-2",
-        "focus-visible:ring-inset focus-visible:ring-ring select-none",
-        isCurrent && "bg-primary/5",
-        isSelected && "bg-primary/10",
+        "group/row relative flex w-full items-center gap-2.5 sm:gap-3 px-3 py-2 sm:px-3.5 sm:py-2.5 text-left rounded-xl sm:rounded-2xl [content-visibility:auto] [contain-intrinsic-size:auto_58px]",
+        "border transition-all duration-150 ease-out active:scale-[0.985] active:brightness-105 focus-visible:outline-none focus-visible:ring-2",
+        "focus-visible:ring-inset focus-visible:ring-ring select-none transform-gpu will-change-transform shadow-xs",
+        isCurrent
+          ? "bg-primary/[0.10] border-primary/35 shadow-[0_4px_16px_rgba(255,40,70,0.12)] ring-1 ring-primary/20"
+          : isSelected
+            ? "bg-primary/[0.15] border-primary/40 shadow-sm"
+            : "bg-white/[0.035] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.12]",
         className,
       )}
     >
@@ -454,7 +457,7 @@ export const TrackRow = memo(function TrackRow({
         /* The position number is only useful until you have decided to act on the row, so it
             gives way to a play glyph on hover — and to a level meter once this row is the one
             playing. All three share the slot, so the row never reflows between states. */
-        <span className="relative w-6 shrink-0 text-center text-xs tabular-nums text-muted-foreground">
+        <span className="relative w-6 sm:w-7 shrink-0 text-center text-xs font-semibold tabular-nums text-muted-foreground/75">
           {/* Number */}
           <span
             className={cn(
@@ -488,14 +491,14 @@ export const TrackRow = memo(function TrackRow({
           )}
 
           {isCurrent && (
-            <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
+            <span className="absolute inset-0 flex items-center justify-center text-primary" aria-hidden="true">
               {isPlaying ? (
                 <MusicVisualizer
                   bars={4}
                   className="[--music-gap:2px] [--music-height:13px] [--music-width:17px]"
                 />
               ) : (
-                <PlayActiveIcon size={14} className="text-primary" />
+                <PlayActiveIcon size={14} className="text-primary fill-primary" />
               )}
             </span>
           )}
@@ -503,12 +506,12 @@ export const TrackRow = memo(function TrackRow({
       ) : null}
 
       {showArtwork ? (
-        <div className="relative size-10 shrink-0 overflow-hidden rounded-lg">
+        <div className="relative size-11 sm:size-12 shrink-0 overflow-hidden rounded-[10px] sm:rounded-xl ring-1 ring-white/10 shadow-xs">
           <TrackArtwork
             className="size-full object-cover"
-            size={40}
+            size={48}
             artworkUrl={track.artworkUrl}
-            iconSize={18}
+            iconSize={20}
           />
           {hideIndex && isCurrent && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/60">
@@ -525,7 +528,7 @@ export const TrackRow = memo(function TrackRow({
         </div>
       ) : null}
 
-      <span className="flex min-w-0 flex-1 flex-col">
+      <span className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
         {/*
           The badge sits beside the title rather than inside it: as a sibling it keeps its
           own width while `truncate` eats the title, so a long name shortens instead of
@@ -534,8 +537,8 @@ export const TrackRow = memo(function TrackRow({
         <span className="flex min-w-0 items-center gap-1.5">
           <span
             className={cn(
-              "truncate text-sm font-medium",
-              isCurrent ? "text-primary" : "text-foreground",
+              "truncate text-sm sm:text-[15px] font-semibold leading-snug",
+              isCurrent ? "text-primary font-bold" : "text-foreground",
             )}
           >
             {track.title}
@@ -543,7 +546,7 @@ export const TrackRow = memo(function TrackRow({
           {track.isExplicit && <ExplicitBadge />}
         </span>
         <ArtistLinks
-          className="truncate text-xs text-muted-foreground"
+          className="truncate text-xs text-muted-foreground/80 font-medium leading-none"
           artists={track.artists}
           fallback={track.artist}
           suppressArtistId={suppressArtistId}
@@ -626,7 +629,7 @@ export const TrackRow = memo(function TrackRow({
             role="button"
             tabIndex={0}
             aria-label={`More options for ${track.title}`}
-            className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground active:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+            className="flex size-8.5 shrink-0 items-center justify-center rounded-full text-muted-foreground/80 transition-all hover:text-foreground active:scale-90 active:bg-white/15 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
             onClick={(event) => {
               event.stopPropagation();
               handleContextMenu(event);

@@ -275,11 +275,8 @@ class MainActivity : TauriActivity() {
                     it.resumeTimers()
                     val escapedCommand = command.replace("'", "\\'")
                     val js = "if (window.__neno_media_command) { window.__neno_media_command('$escapedCommand'); } else if (window.__zuno_media_command) { window.__zuno_media_command('$escapedCommand'); } else { window.dispatchEvent(new CustomEvent('com.neno.desktop.MEDIA_CONTROL', { detail: { command: '$escapedCommand' } })); }"
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
-                        it.evaluateJavascript(js, null)
-                    } else {
-                        it.loadUrl("javascript:(function(){try{" + js + "}catch(e){}})()")
-                    }
+                    it.evaluateJavascript(js, null)
+                    it.loadUrl("javascript:(function(){try{" + js + "}catch(e){}})()")
                 } catch (e: Throwable) {
                     e.printStackTrace()
                 }

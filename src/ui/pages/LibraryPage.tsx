@@ -305,7 +305,7 @@ export function LibraryPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Main 4 Library Options: Downloads, Liked Songs, Playlists, Albums */}
           <div
-            className="flex shrink-0 gap-1 rounded-full bg-card/70 p-1 max-w-full overflow-x-auto no-scrollbar scroll-smooth"
+            className="flex shrink-0 gap-1 rounded-full bg-card/70 p-1 max-w-full overflow-x-auto no-scrollbar scroll-smooth [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]"
             role="tablist"
             aria-label="Library section"
           >
@@ -419,7 +419,7 @@ export function LibraryPage({
                 <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/15 text-primary shrink-0 shadow-inner">
                   <HeartIcon size={22} fill="currentColor" />
                 </div>
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-2 sm:gap-2.5">
                   <div className="flex items-center gap-2">
                     <span className="text-base font-bold text-foreground">Liked Songs</span>
                     <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary tabular-nums">
@@ -497,7 +497,7 @@ export function LibraryPage({
               <EmptyState noun="liked songs" query={query.trim()} onClearQuery={() => setQuery("")} />
             ) : (
               <div className="flex flex-col">
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-2 sm:gap-2.5">
                   {likedSongs.map((track, index) => (
                     <TrackRow
                       key={track.id}

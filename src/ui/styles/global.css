@@ -716,3 +716,9 @@ img {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
+[data-page-scroll-root] {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  contain: content;
+  transform: translateZ(0);
+}

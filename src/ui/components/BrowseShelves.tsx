@@ -12,7 +12,7 @@ import { CommunityPlaylistCard } from "./CommunityPlaylistCard";
 import { DailyDiscoverCard } from "./DailyDiscoverCard";
 
 /** Horizontal, scrollable, and clipped at the edge so there is a hint of more. */
-const SHELF_ROW = "flex gap-2.5 sm:gap-3.5 overflow-x-auto pb-1.5 snap-x no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]";
+const SHELF_ROW = "flex gap-2.5 sm:gap-3.5 overflow-x-auto pb-1.5 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]";
 
 function chunkArray<T>(arr: readonly T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -114,7 +114,7 @@ const ArtistTile = memo(function ArtistTile({ artist, onOpen }: { artist: Artist
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-28 sm:w-32 shrink-0 snap-start flex-col items-center gap-2 rounded-xl p-1.5 sm:p-2 text-center transition-all hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex w-28 sm:w-32 shrink-0 flex-col items-center gap-2 rounded-xl p-1.5 sm:p-2 text-center transition-all hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <TrackArtwork
         className="size-20 sm:size-24 rounded-full shadow-sm"
@@ -133,7 +133,7 @@ const PlaylistTile = memo(function PlaylistTile({ playlist, onOpen }: { playlist
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-32 sm:w-36 shrink-0 snap-start flex-col gap-2 rounded-xl p-1.5 sm:p-2 text-left transition-all hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex w-32 sm:w-36 shrink-0 flex-col gap-2 rounded-xl p-1.5 sm:p-2 text-left transition-all hover:bg-card active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <TrackArtwork
         className="size-28 sm:size-32 rounded-xl object-cover shadow-sm border border-white/10"
@@ -216,7 +216,7 @@ export const BrowseShelves = memo(function BrowseShelves({
                 </h2>
               </div>
 
-              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
+              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
                 {shelf.playlists.map((playlist) => (
                   <CommunityPlaylistCard
                     key={playlist.id}
@@ -250,7 +250,7 @@ export const BrowseShelves = memo(function BrowseShelves({
                 )}
               </div>
 
-              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
+              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
                 {shelf.tracks.map((track) => (
                   <DailyDiscoverCard
                     key={track.id}
@@ -313,11 +313,11 @@ export const BrowseShelves = memo(function BrowseShelves({
 
             {/* ── Tracks row (Quick picks / Songs) ──────────────────────── */}
             {hasTracks && (
-              <div className="flex gap-2.5 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
+              <div className="flex gap-2.5 sm:gap-4 overflow-x-auto pb-2 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
                 {chunkArray(shelf.tracks, 4).map((chunk, colIndex) => (
                   <div
                     key={`col-${colIndex}`}
-                    className="w-[88vw] max-w-[360px] shrink-0 snap-start flex flex-col gap-1.5"
+                    className="w-[88vw] max-w-[360px] shrink-0 flex flex-col gap-1.5"
                   >
                     {chunk.map((track) => (
                       <QuickPickItem
@@ -361,7 +361,7 @@ export const BrowseShelves = memo(function BrowseShelves({
                   {shelf.albums.map((album) => (
                     <div
                       key={album.id}
-                      className="w-32 sm:w-36 shrink-0 snap-start"
+                      className="w-32 sm:w-36 shrink-0"
                       onContextMenu={(event) => openAlbumMenu(event, album)}
                     >
                       <AlbumCard
@@ -393,7 +393,7 @@ export const BrowseShelves = memo(function BrowseShelves({
                         type="button"
                         onClick={() => onOpenPlaylist(playlist)}
                         onContextMenu={(event) => openPlaylistMenu(event, playlist)}
-                        className="group/hit flex w-36 sm:w-44 shrink-0 snap-start flex-col gap-2 rounded-2xl p-1.5 text-left transition-all hover:bg-white/[0.04] active:scale-95 cursor-pointer"
+                        className="group/hit flex w-36 sm:w-44 shrink-0 flex-col gap-2 rounded-2xl p-1.5 text-left transition-all hover:bg-white/[0.04] active:scale-95 cursor-pointer"
                       >
                         <div className="relative size-36 sm:size-44 rounded-2xl overflow-hidden shadow-lg border border-white/10 bg-neutral-900">
                           <TrackArtwork
