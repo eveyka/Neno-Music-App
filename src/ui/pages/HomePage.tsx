@@ -359,30 +359,65 @@ export function HomePage({
     return orderedShelves.find((shelf) => isQuickPicksTitle(shelf.title) || shelf.tracks.length > 0) ?? null;
   }, [orderedShelves]);
 
-  const remainingShelves = useMemo(() => {
-    const list = orderedShelves.filter((s) => s !== quickPicksShelf);
+  const trendingCommunityShelf = useMemo(() => {
+    if (!ytmHomeFeed?.shelves) return null;
+    return (
+      ytmHomeFeed.shelves.find((s) => {
+        const t = s.title.toLowerCase();
+        return (
+          t.includes("trending") ||
+          t.includes("trend") ||
+          t.includes("community") ||
+          t.includes("कम्युनिटी") ||
+          t.includes("ट्रेंडिंग")
+        );
+      }) ?? null
+    );
+  }, [ytmHomeFeed]);
+
+  const remainingOtherShelves = useMemo(() => {
+    const list = orderedShelves.filter(
+      (s) =>
+        s !== trendingCommunityShelf &&
+        !s.title.toLowerCase().includes("discover") &&
+        !s.title.includes("खोज"),
+    );
 
     const getShelfPriority = (title: string): number => {
       const t = title.toLowerCase();
-      if (t.includes("trending") || t.includes("trend") || t.includes("ट्रेंडिंग")) return 1;
-      if (t.includes("mixed") || t.includes("mixes") || t.includes("मिक्स") || t.includes("supermix")) return 2;
-      if (t.includes("community") || t.includes("कम्युनिटी")) return 3;
-      if (t.includes("cover") || t.includes("remix") || t.includes("कवर") || t.includes("रीमिक्स")) return 4;
-      if (t.includes("discover") || t.includes("खोज")) return 5;
-      if (t.includes("hit") || t.includes("hitlist") || t.includes("सुपरहिट")) return 6;
+      if (t.includes("album") || t.includes("एल्बम")) return 1;
+      if (t.includes("playlist") || t.includes("प्लेलिस्ट")) return 2;
+      if (t.includes("mixed") || t.includes("mixes") || t.includes("मिक्स") || t.includes("supermix")) return 3;
+      if (t.includes("artist") || t.includes("कलाकार")) return 4;
+      if (t.includes("hit") || t.includes("hitlist") || t.includes("सुपरहिट")) return 5;
       return 10;
     };
 
     return [...list].sort((a, b) => getShelfPriority(a.title) - getShelfPriority(b.title));
-  }, [orderedShelves, quickPicksShelf]);
+  }, [orderedShelves, trendingCommunityShelf]);
 
   const dailyDiscoverTracks = useMemo(() => {
-    const hasYtmDiscover = remainingShelves.some(
-      (s) => s.title.toLowerCase().includes("discover") || s.title.includes("खोज"),
+    // 1. Look for explicit discover/quick picks shelf with tracks
+    const explicitDiscover = ytmHomeFeed?.shelves.find(
+      (s) =>
+        s.tracks.length > 0 &&
+        (s.title.toLowerCase().includes("discover") ||
+          s.title.includes("खोज") ||
+          isQuickPicksTitle(s.title)),
     );
-    if (hasYtmDiscover) return [];
-    return suggestions.slice(0, 8);
-  }, [remainingShelves, suggestions]);
+    if (explicitDiscover && explicitDiscover.tracks.length > 0) {
+      return explicitDiscover.tracks.slice(0, 12);
+    }
+    // 2. Look for quick picks shelf tracks
+    if (quickPicksShelf && quickPicksShelf.tracks.length > 0) {
+      return quickPicksShelf.tracks.slice(0, 12);
+    }
+    // 3. Fallback to suggestions / recommendations
+    if (suggestions && suggestions.length > 0) {
+      return suggestions.slice(0, 12);
+    }
+    return [];
+  }, [ytmHomeFeed, quickPicksShelf, suggestions]);
 
   useEffect(() => {
     if (!showYtmHomeFeed) return;
@@ -912,33 +947,38 @@ export function HomePage({
         </section>
       )}
 
-      {/* ── 1. Quick picks (YouTube Music Personalized Top Section) ────── */}
-      {showYtmHomeFeed && libraryState.status === "ready" && (
-        <div className="flex flex-col gap-8">
-          {isLoadingHomeFeed && !ytmHomeFeed && (
-            <section className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-xl font-bold tracking-tight text-white">Loading your feed…</h2>
-                <span className="text-xs text-muted-foreground animate-pulse">Updating…</span>
+      {/* ── 1. Topmost: Daily Discover Songs (Direct songs, NO title) ─────── */}
+      <section className="w-full">
+        {dailyDiscoverTracks.length > 0 ? (
+          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-proximity no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
+            {dailyDiscoverTracks.map((track) => (
+              <DailyDiscoverCard
+                key={track.id}
+                track={track}
+                playerController={playerController}
+              />
+            ))}
+          </div>
+        ) : (isLoadingHomeFeed || isLoadingSuggestions || isWaitingForLibrary) ? (
+          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 no-scrollbar">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="w-[84vw] max-w-[340px] aspect-[4/5] min-h-[340px] shrink-0 rounded-3xl overflow-hidden bg-neutral-900/60 border border-white/10 relative"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent animate-pulse" />
+                <div className="absolute bottom-6 left-6 right-6 flex flex-col gap-2">
+                  <div className="h-6 w-3/4 rounded-lg bg-white/10 animate-pulse" />
+                  <div className="h-4 w-1/2 rounded-md bg-white/10 animate-pulse" />
+                </div>
               </div>
-              <AlbumGridSkeleton count={isMobile ? 4 : 12} label="Loading your feed" />
-            </section>
-          )}
-          {quickPicksShelf && (
-            <BrowseShelves
-              shelves={[quickPicksShelf]}
-              playerController={playerController}
-              libraryController={libraryController}
-              onOpenAlbum={onOpenAlbum ?? NOOP}
-              onOpenArtist={onOpenArtist ?? NOOP}
-              onOpenPlaylist={onOpenPlaylist ?? NOOP}
-            />
-          )}
-        </div>
-      )}
+            ))}
+          </div>
+        ) : null}
+      </section>
 
-      {/* ── 2. Speed dial (YouTube Music Listen Again / Speed Dial) ─────── */}
-      {libraryState.status === "ready" && speedDialItems.length > 0 && (
+      {/* ── 2. Speed dial ─────────────────────────────────────────────────── */}
+      {libraryState.status === "ready" && (speedDialItems.length > 0 || isLoadingHomeFeed) && (
         <SpeedDialSection
           items={speedDialItems}
           account={libraryState.library?.account}
@@ -951,51 +991,31 @@ export function HomePage({
         />
       )}
 
-      {/* ── 3. Quick Destinations (Library, Browse, History, Downloads) ─── */}
+      {/* ── 3. Quick Destinations (Library, Browse, History, Downloads) ───── */}
       <HomeDestinations {...destinations} />
 
-      {/* ── 4. Made for you ──────────────────────────────────────────────── */}
+      {/* ── 4. Made for you ───────────────────────────────────────────────── */}
       {showMadeForYou && madeForYouSection}
 
-      {/* ── 5. Remaining YouTube Music shelves (Albums, Community, Mixed, Hits) ─── */}
-      {showYtmHomeFeed && libraryState.status === "ready" && remainingShelves.length > 0 && (
-        <div className="flex flex-col gap-8">
-          <BrowseShelves
-            shelves={remainingShelves}
-            playerController={playerController}
-            libraryController={libraryController}
-            onOpenAlbum={onOpenAlbum ?? NOOP}
-            onOpenArtist={onOpenArtist ?? NOOP}
-            onOpenPlaylist={onOpenPlaylist ?? NOOP}
-          />
-        </div>
-      )}
-
-      {/* ── 6. Your Daily Discover (Screenshot 3 fallback) ───────────────── */}
-      {dailyDiscoverTracks.length > 0 && (
-        <section className="flex flex-col gap-3.5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-              Your daily discover
-            </h2>
-            <button
-              type="button"
-              onClick={() => playerController.playTrackById(dailyDiscoverTracks[0].id)}
-              className="rounded-full border border-white/20 bg-white/10 hover:bg-white/20 active:scale-95 px-3.5 py-1 text-xs font-semibold text-white transition-all shadow-xs cursor-pointer"
-            >
-              Play all
-            </button>
+      {/* ── 5. Trending community Playlist ────────────────────────────────── */}
+      {showYtmHomeFeed && libraryState.status === "ready" && (
+        trendingCommunityShelf ? (
+          <div className="flex flex-col gap-4">
+            <BrowseShelves
+              shelves={[trendingCommunityShelf]}
+              playerController={playerController}
+              libraryController={libraryController}
+              onOpenAlbum={onOpenAlbum ?? NOOP}
+              onOpenArtist={onOpenArtist ?? NOOP}
+              onOpenPlaylist={onOpenPlaylist ?? NOOP}
+            />
           </div>
-          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-proximity no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
-            {dailyDiscoverTracks.map((track) => (
-              <DailyDiscoverCard
-                key={track.id}
-                track={track}
-                playerController={playerController}
-              />
-            ))}
-          </div>
-        </section>
+        ) : isLoadingHomeFeed ? (
+          <section className="flex flex-col gap-3">
+            <div className="h-6 w-48 rounded-lg bg-white/10 animate-pulse" />
+            <AlbumGridSkeleton count={isMobile ? 3 : 6} label="Loading trending community playlists" />
+          </section>
+        ) : null
       )}
 
       {compactRecent.length === 0 && isWaitingForLibrary && (
@@ -1081,6 +1101,27 @@ export function HomePage({
             ))}
           </div>
         </section>
+      )}
+
+      {/* ── 7. Remaining Shelves (Artists, Recommended Albums, Featured Playlists, Hits) ── */}
+      {showYtmHomeFeed && libraryState.status === "ready" && (
+        remainingOtherShelves.length > 0 ? (
+          <div className="flex flex-col gap-8">
+            <BrowseShelves
+              shelves={remainingOtherShelves}
+              playerController={playerController}
+              libraryController={libraryController}
+              onOpenAlbum={onOpenAlbum ?? NOOP}
+              onOpenArtist={onOpenArtist ?? NOOP}
+              onOpenPlaylist={onOpenPlaylist ?? NOOP}
+            />
+          </div>
+        ) : isLoadingHomeFeed ? (
+          <section className="flex flex-col gap-3">
+            <div className="h-6 w-52 rounded-lg bg-white/10 animate-pulse" />
+            <AlbumGridSkeleton count={isMobile ? 4 : 8} label="Loading recommendations" />
+          </section>
+        ) : null
       )}
 
       {moreSuggestions.length === 0 && isLoadingSuggestions && (

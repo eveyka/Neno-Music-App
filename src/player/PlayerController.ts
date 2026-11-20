@@ -195,6 +195,8 @@ export class PlayerController {
   /** The track already reloaded once after ending early, so a second failure gives up. */
   private prematureEndTrackId: string | null = null;
   private pendingSeekTime: number | null = null;
+  private lastValidPlaybackPositionSec = 0;
+  private autoSkipTimer: ReturnType<typeof setTimeout> | null = null;
   private radioQueueRequestId = 0;
   /*
    * "End queue on this song": the queue entry after which playback stops.
@@ -415,6 +417,7 @@ export class PlayerController {
     }
     this.loadedTrackId = null;
     this.pendingSeekTime = null;
+    this.lastValidPlaybackPositionSec = 0;
     try {
       if (queueContext !== undefined) {
         this.queueContext = queueContext;
@@ -582,6 +585,9 @@ export class PlayerController {
       }
 
       const isResumingLoadedTrack = this.loadedTrackId === track.id && this.audioEngine.isDeckLoaded(track.id);
+      if (!isResumingLoadedTrack && this.pendingSeekTime === null && this.lastValidPlaybackPositionSec > 0) {
+        this.pendingSeekTime = this.lastValidPlaybackPositionSec;
+      }
       if (!isResumingLoadedTrack || this.state.status === "error") {
         this.setState({ status: "loading", error: null });
       }
@@ -654,9 +660,14 @@ export class PlayerController {
   }
 
   async pause(): Promise<void> {
+    const pos = this.getCurrentTime();
+    if (pos > 0.5) {
+      this.lastValidPlaybackPositionSec = pos;
+    }
     logInternalInfo("PlayerController.pause start", {
       currentStatus: this.state.status,
       currentTrackId: this.state.currentTrack?.id ?? null,
+      savedPosition: this.lastValidPlaybackPositionSec,
     });
     try {
       this.audioEngine.pause();
@@ -681,6 +692,10 @@ export class PlayerController {
   private lastSkipPrevTime = 0;
 
   async skipToNext(): Promise<void> {
+    if (this.autoSkipTimer) {
+      clearTimeout(this.autoSkipTimer);
+      this.autoSkipTimer = null;
+    }
     const now = Date.now();
     if (now - this.lastSkipNextTime < 350) return;
     this.lastSkipNextTime = now;
@@ -1058,7 +1073,7 @@ export class PlayerController {
 
   /**
    * Recovers audio playback when the hardware audio output route changes
-   * (e.g. Bluetooth headphones connected or disconnected, wired headset plugged in/out, phone call ended).
+   * (e.g. Bluetooth headphones connected or disconnected, wired headset plugged in/out).
    */
   async handleAudioOutputDeviceChanged(): Promise<void> {
     if (!usesRustAudioEngine()) return;
@@ -1067,7 +1082,7 @@ export class PlayerController {
 
     const track = this.state.currentTrack;
     const wasPlaying = this.state.status === "playing";
-    const position = this.getCurrentTime();
+    const position = this.lastValidPlaybackPositionSec > 0 ? this.lastValidPlaybackPositionSec : this.getCurrentTime();
 
     // setOutputDevice in Rust drops the old stream and re-opens the device sink.
     // Try up to 3 times with backoff in case Android audio HAL is still settling.
@@ -1085,12 +1100,10 @@ export class PlayerController {
       }
     }
 
-    // Crucial: Always clear loadedTrackId and stop the audio engine so any stale
-    // stream or buffer binding is purged. This guarantees that whether auto-resuming
-    // or when the user later taps "Play" in the app, the track is freshly loaded onto
-    // the new hardware output route.
+    // Always clear loadedTrackId and stop the audio engine so stale binding is purged.
     this.loadedTrackId = null;
     this.audioEngine.stop();
+    this.pendingSeekTime = position > 0 ? position : null;
 
     if (track) {
       try {
@@ -1109,6 +1122,64 @@ export class PlayerController {
           error: error instanceof Error ? error.message : String(error),
         });
       }
+    }
+  }
+
+  /**
+   * Resumes playback after a phone call has ended without restarting from 0:00.
+   * Recreates the audio output route and restores the exact position where playback was interrupted.
+   */
+  async resumeAfterCall(positionSec: number): Promise<void> {
+    logInternalInfo("PlayerController.resumeAfterCall", {
+      positionSec,
+      lastValid: this.lastValidPlaybackPositionSec,
+      currentTrackId: this.state.currentTrack?.id,
+    });
+
+    const track = this.state.currentTrack;
+    if (!track) return;
+
+    const resumePos = positionSec > 0 
+      ? positionSec 
+      : (this.lastValidPlaybackPositionSec > 0 ? this.lastValidPlaybackPositionSec : this.getCurrentTime());
+
+    if (usesRustAudioEngine()) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await setOutputDevice(null);
+          break;
+        } catch {
+          if (attempt < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+          }
+        }
+      }
+
+      this.loadedTrackId = null;
+      this.audioEngine.stop();
+      this.pendingSeekTime = resumePos > 0 ? resumePos : null;
+
+      try {
+        await this.ensureTrackLoaded(track);
+        if (resumePos > 0) {
+          this.audioEngine.seekTo(resumePos);
+        }
+        const started = await this.playLoadedTrack();
+        if (started) {
+          this.setState({ status: "playing", error: null });
+        }
+      } catch (error) {
+        logInternalWarn("PlayerController.resumeAfterCall reload failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        this.setError(error);
+      }
+    } else {
+      if (resumePos > 0) {
+        this.pendingSeekTime = resumePos;
+        this.audioEngine.seekTo(resumePos);
+      }
+      await this.play();
     }
   }
 
@@ -2174,14 +2245,43 @@ export class PlayerController {
     });
     const detail = getErrorMessage(error);
 
+    const isYtError2 = detail.includes("YouTube player error 2");
+    const isEmbedRestricted = detail.includes("101") || detail.includes("150");
+    const canSkip = this.queue.all.length > 1;
+
+    let friendly = detail && detail !== "[object Object]"
+      ? detail
+      : "Playback failed. Check internal logs for details.";
+
+    if (isYtError2) {
+      friendly = canSkip
+        ? "Track stream unplayable on this device. Auto-skipping to next..."
+        : "Track stream unplayable on this device.";
+    } else if (isEmbedRestricted) {
+      friendly = canSkip
+        ? "Track playback restricted by owner. Auto-skipping to next..."
+        : "Track playback restricted by owner.";
+    }
+
     this.setState({
       status: "error",
-      error: detail && detail !== "[object Object]"
-        ? `Playback failed. ${detail}`
-        : "Playback failed. Check internal logs for details.",
+      error: friendly,
       // Preserve currentTrack to prevent reversion to hardcoded track
       currentTrack: this.state.currentTrack,
     });
+
+    if (canSkip && !this.handlingTrackEnd) {
+      if (this.autoSkipTimer) {
+        clearTimeout(this.autoSkipTimer);
+      }
+      this.autoSkipTimer = setTimeout(() => {
+        this.autoSkipTimer = null;
+        if (this.state.status === "error") {
+          logInternalInfo("PlayerController auto-skipping unplayable track");
+          void this.skipToNext();
+        }
+      }, 1500);
+    }
   }
 
   private emit() {
@@ -2242,6 +2342,7 @@ export class PlayerController {
 
   async seekTo(time: number): Promise<void> {
     const seekTime = Math.max(0, time);
+    this.lastValidPlaybackPositionSec = seekTime;
     logInternalInfo("PlayerController.seekTo", { time: seekTime, loadedTrackId: this.loadedTrackId, currentTrackId: this.state.currentTrack?.id });
 
     const currentTrack = this.state.currentTrack;
@@ -2394,6 +2495,7 @@ export class PlayerController {
     this.audioEngine.abandonActiveLoad();
     this.loadedTrackId = null;
     this.pendingSeekTime = null;
+    this.lastValidPlaybackPositionSec = 0;
   }
 
   suspendForTabSwitch(): void {
@@ -2432,7 +2534,11 @@ export class PlayerController {
   }
 
   getCurrentTime(): number {
-    return this.audioEngine.getCurrentTime();
+    const time = this.audioEngine.getCurrentTime();
+    if (time > 0.5) {
+      this.lastValidPlaybackPositionSec = time;
+    }
+    return time;
   }
 
   getPlayerSession(): PlayerSession {

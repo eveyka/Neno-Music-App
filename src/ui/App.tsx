@@ -78,6 +78,7 @@ import { useAudioKeepalive } from "../player/audioKeepalive";
 import { playerUIStore, usePlayerUISelector } from "./stores/playerUIStore";
 import { AppLoadingScreen } from "./components/AppLoadingScreen";
 import { AuthOverlay } from "./components/AuthOverlay";
+import { CloseIcon } from "./icons";
 import { UpdateToast } from "./components/UpdateToast";
 import { ReleaseNoteDialog } from "./components/ReleaseNoteDialog";
 import { markReleaseNoteSeen, resolveReleaseNoteVersion } from "../internal/releaseNote";
@@ -436,6 +437,13 @@ export default function App() {
     () => isMacOS && localStorage.getItem(KEYCHAIN_NOTICE_COMPLETE_KEY) !== "true"
   );
   const [showOnboardingWelcome, setShowOnboardingWelcome] = useState(false);
+  const [inAppToast, setInAppToast] = useState<{
+    id: string;
+    title: string;
+    message: string;
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -729,6 +737,15 @@ export default function App() {
 
   const backHandlerRef = useRef<() => boolean>(() => false);
   backHandlerRef.current = () => {
+    // 1. Give active modal or sheet (like MobileNowPlayingModal / Up Next queue) first priority
+    const win = window as unknown as { __active_modal_back?: () => boolean };
+    if (typeof win.__active_modal_back === "function") {
+      try {
+        const handled = win.__active_modal_back();
+        if (handled) return true;
+      } catch (_e) {}
+    }
+
     if (playerUIStore.getState().isMobileNowPlayingOpen) {
       playerUIStore.setMobileNowPlayingOpen(false);
       return true;
@@ -773,18 +790,51 @@ export default function App() {
 
   useEffect(() => {
     if (libraryState.status !== "error" || !libraryState.error) return;
-    const message = `YouTube Music sign-in or library sync failed:\n\n${libraryState.error}`;
+    const message = libraryState.error;
     if (lastErrorAlertRef.current === message) return;
     lastErrorAlertRef.current = message;
-    window.alert(message);
+
+    setInAppToast({
+      id: String(Date.now()),
+      title: "Library Sync Notice",
+      message: message.replace(/^YouTube Music sign-in or library sync failed:\s*/i, ""),
+    });
+
+    const timer = window.setTimeout(() => {
+      setInAppToast((prev) => (prev?.title === "Library Sync Notice" ? null : prev));
+    }, 5000);
+    return () => window.clearTimeout(timer);
   }, [libraryState.error, libraryState.status]);
 
   useEffect(() => {
     if (playerState.status !== "error" || !playerState.error) return;
-    const message = `Playback failed:\n\n${playerState.error}`;
-    if (lastErrorAlertRef.current === message) return;
-    lastErrorAlertRef.current = message;
-    window.alert(message);
+    const rawError = playerState.error;
+    if (lastErrorAlertRef.current === rawError) return;
+    lastErrorAlertRef.current = rawError;
+
+    const isYtError2 = rawError.includes("error 2") || rawError.includes("Error 2");
+    const isEmbedRestricted = rawError.includes("101") || rawError.includes("150");
+    const title = isYtError2
+      ? "Playback Unavailable"
+      : isEmbedRestricted
+      ? "Playback Restricted"
+      : "Playback Notice";
+
+    setInAppToast({
+      id: String(Date.now()),
+      title,
+      message: rawError.replace(/^Playback failed\.?\s*/i, ""),
+      actionLabel: "Skip",
+      onAction: () => {
+        setInAppToast(null);
+        void playerController.skipToNext();
+      },
+    });
+
+    const timer = window.setTimeout(() => {
+      setInAppToast((prev) => (prev?.title === title ? null : prev));
+    }, 5000);
+    return () => window.clearTimeout(timer);
   }, [playerState.error, playerState.status]);
 
   useEffect(() => {
@@ -2444,6 +2494,51 @@ export default function App() {
             progress={libraryState.authProgress}
             onCancel={() => void libraryController.cancelSignIn()}
           />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {inAppToast && (
+          <motion.div
+            key={inAppToast.id}
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="fixed top-5 left-4 right-4 z-[99999] mx-auto max-w-md pointer-events-auto"
+          >
+            <div className="flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-zinc-900/95 border border-red-500/30 text-white shadow-2xl backdrop-blur-xl shadow-red-950/25">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/15 text-red-400">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0 pr-1">
+                <div className="text-xs font-semibold text-red-300 tracking-wide uppercase">
+                  {inAppToast.title}
+                </div>
+                <div className="text-sm font-medium text-zinc-200 truncate mt-0.5">
+                  {inAppToast.message}
+                </div>
+              </div>
+              {inAppToast.actionLabel && inAppToast.onAction && (
+                <button
+                  type="button"
+                  onClick={inAppToast.onAction}
+                  className="shrink-0 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs font-semibold transition active:scale-95"
+                >
+                  {inAppToast.actionLabel}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setInAppToast(null)}
+                className="shrink-0 p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
+              >
+                <CloseIcon className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

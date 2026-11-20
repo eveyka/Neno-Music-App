@@ -21,7 +21,6 @@ import {
   RepeatActiveIcon,
   RepeatIcon,
   RepeatOneActiveIcon,
-  ScreencastIcon,
   ShareIcon,
   ShuffleActiveIcon,
   ShuffleIcon,
@@ -266,7 +265,7 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
         </div>
       </div>
 
-      {/* FOREGROUND ROW CARD */}
+      {/* FOREGROUND ROW CARD - Systematic Floating Island Card */}
       <div
         ref={rowElRef}
         onTouchStart={handleTouchStart}
@@ -274,9 +273,9 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
         onClick={() => onPlay(absoluteIndex)}
-        className="relative z-10 flex items-center justify-between gap-3 py-2 px-2.5 rounded-xl bg-[#141414] hover:bg-[#1c1c1c] active:bg-[#202020] border border-white/5 cursor-pointer"
+        className="relative z-10 flex items-center justify-between gap-3 py-2.5 px-3 rounded-2xl bg-[#171717] hover:bg-[#1f1f1f] active:bg-[#252525] border border-white/10 shadow-xs cursor-pointer transition-colors"
       >
-        <div className="size-11 shrink-0 overflow-hidden rounded-lg shadow-sm border border-white/10 bg-black/40">
+        <div className="size-11 shrink-0 overflow-hidden rounded-xl shadow-sm border border-white/10 bg-black/40">
           <TrackArtwork
             artworkUrl={track.artworkUrl}
             size={44}
@@ -284,11 +283,11 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
           />
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm font-semibold text-white">
+        <div className="flex min-w-0 flex-1 flex-col justify-center">
+          <span className="truncate text-[13px] font-semibold text-white leading-tight">
             {track.title}
           </span>
-          <span className="truncate text-xs font-medium text-white/60">
+          <span className="truncate text-[11px] font-medium text-white/60 leading-tight mt-0.5">
             {track.artist || "Unknown Artist"}
             {track.durationSec ? ` • ${formatMinutesSeconds(track.durationSec)}` : ""}
           </span>
@@ -642,11 +641,37 @@ export function MobileNowPlayingModal({
       ? `${currentTrack.title} Radio`
       : currentTrack?.album || (currentTrack?.artist ? `${currentTrack.artist} Radio` : "Up Next");
 
-  // Cast click handler - displays "Coming soon" as requested
-  const handleCastClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    showToast("Coming soon");
-  };
+  // Android Hardware Back Button interception for modal & Up Next queue sheet
+  useEffect(() => {
+    if (!isOpen) return;
+    const win = window as unknown as { __active_modal_back?: () => boolean };
+    win.__active_modal_back = () => {
+      // 1. If sleep timer is open, close sleep timer first
+      if (isSleepTimerSheetOpen) {
+        setIsSleepTimerSheetOpen(false);
+        return true;
+      }
+      // 2. If Up Next queue sheet is open (half or full), collapse it back to normal player
+      if (queueSheetState !== "collapsed") {
+        setQueueSheetState("collapsed");
+        return true;
+      }
+      // 3. If in lyrics mode, switch back to normal player view
+      if (audioMode === "lyrics") {
+        setAudioMode("audio");
+        return true;
+      }
+      // 4. If normal player, smoothly minimize player (returning to current page)
+      if (isOpen) {
+        onClose();
+        return true;
+      }
+      return false;
+    };
+    return () => {
+      delete win.__active_modal_back;
+    };
+  }, [isOpen, isSleepTimerSheetOpen, queueSheetState, audioMode, onClose]);
 
   // Realistic/stable like count formatted like YouTube Music (e.g. 11K)
   const likeCountText = useMemo(() => {
@@ -1069,17 +1094,9 @@ export function MobileNowPlayingModal({
                 </button>
               </div>
 
-              {/* Right Action Icons: Sleep Timer, Cast & 3-dots Menu */}
+              {/* Right Action Icons: Sleep Timer & 3-dots Menu */}
               <div className="flex items-center gap-1">
                 <SleepTimerButton onClick={() => setIsSleepTimerSheetOpen(true)} />
-                <button
-                  type="button"
-                  onClick={handleCastClick}
-                  className="flex size-10 items-center justify-center rounded-full text-white/90 transition-transform active:scale-90 hover:text-white"
-                  aria-label="Cast audio"
-                >
-                  <ScreencastIcon size={22} />
-                </button>
                 <button
                   type="button"
                   onClick={(e) => currentTrack && openTrackMenu(e, currentTrack)}
@@ -1502,14 +1519,6 @@ export function MobileNowPlayingModal({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={handleCastClick}
-                      className="flex size-9 items-center justify-center text-white/80 hover:text-white"
-                      aria-label="Cast"
-                    >
-                      <ScreencastIcon size={20} />
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => void playerController.togglePlayPause()}
                       className="flex size-9 items-center justify-center text-white hover:opacity-80 active:scale-90"
                       aria-label={isPlaying ? "Pause" : "Play"}
@@ -1521,42 +1530,59 @@ export function MobileNowPlayingModal({
               )}
 
               {/* Horizontal Pill Drag Handle */}
-              <div className="mx-auto h-1 w-11 rounded-full bg-white/40 my-1" />
+              <div className="mx-auto h-1 w-10 rounded-full bg-white/35 my-1.5" />
 
               {/* "Playing from [Source]" Peek / Header */}
               {queueSheetState === "collapsed" ? (
                 <div className="text-center pb-1">
-                  <span className="truncate text-xs font-medium text-white/80">
-                    {playingFromTitle}
+                  <span className="truncate text-xs font-semibold text-white/80">
+                    Playing from <span className="text-white">{playingFromTitle}</span>
                   </span>
                 </div>
               ) : (
-                <div className="flex items-center justify-between pt-1 pb-1">
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[11px] font-medium text-white/50 leading-tight">
-                      Playing from
-                    </span>
-                    <span className="truncate text-sm font-bold text-white leading-tight">
-                      {playingFromTitle}
+                <div className="flex items-center justify-between pt-1 pb-1.5 border-b border-white/10 mb-2">
+                  <div className="flex flex-col min-w-0 pr-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-extrabold text-white tracking-tight">
+                        Up Next
+                      </span>
+                      {upcomingTracks.length > 0 && (
+                        <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold text-white/80">
+                          {upcomingTracks.length}
+                        </span>
+                      )}
+                    </div>
+                    <span className="truncate text-xs font-medium text-white/50 leading-tight mt-0.5">
+                      Playing from <span className="text-white/80">{playingFromTitle}</span>
                     </span>
                   </div>
 
-                  {/* Save Queue as Playlist Button */}
-                  <button
-                    type="button"
-                    onClick={handleSaveQueueAsPlaylist}
-                    disabled={saveStatus !== "idle"}
-                    className="flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 px-3 py-1.5 text-xs font-semibold text-white transition-transform active:scale-95 disabled:opacity-50"
-                  >
-                    <BookmarkIcon size={14} />
-                    <span>
-                      {saveStatus === "saving"
-                        ? "Saving..."
-                        : saveStatus === "saved"
-                        ? "Saved!"
-                        : "Save"}
-                    </span>
-                  </button>
+                  {/* Actions: Save Queue & Collapse button */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleSaveQueueAsPlaylist}
+                      disabled={saveStatus !== "idle"}
+                      className="flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 px-3 py-1.5 text-xs font-semibold text-white transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      <BookmarkIcon size={13} />
+                      <span>
+                        {saveStatus === "saving"
+                          ? "Saving..."
+                          : saveStatus === "saved"
+                          ? "Saved!"
+                          : "Save"}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQueueSheetState("collapsed")}
+                      className="flex size-7 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white/80 transition-all active:scale-90"
+                      aria-label="Collapse queue"
+                    >
+                      <ChevronDownIcon size={16} />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

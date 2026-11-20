@@ -378,63 +378,68 @@ export function LibraryPage({
                 </div>
               </div>
 
-              {/* Play / Shuffle / Download All / Auto-Download Toggle */}
-              <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-0">
+              {/* Play / Shuffle (Line 1) & Download All / Auto-Download (Line 2) */}
+              <div className="flex flex-col gap-2.5 w-full pt-1">
+                {/* Line 1: Play All & Shuffle - Perfectly balanced 50/50 single line */}
                 {likedSongs.length > 0 && (
-                  <>
+                  <div className="grid grid-cols-2 gap-2.5 w-full">
                     <button
                       type="button"
                       onClick={() => playAllLikedSongs(false)}
-                      className="h-10 flex items-center justify-center gap-2 rounded-full bg-primary px-4 text-xs font-semibold text-primary-foreground shadow-sm shadow-primary/25 transition-transform active:scale-95 hover:brightness-110"
+                      className="h-10 w-full flex items-center justify-center gap-2 rounded-full bg-primary px-4 text-xs font-bold text-primary-foreground shadow-sm shadow-primary/25 transition-transform active:scale-95 hover:brightness-110 truncate"
                     >
-                      <PlayActiveIcon size={15} />
-                      <span>Play All</span>
+                      <PlayActiveIcon size={16} className="shrink-0" />
+                      <span className="truncate">Play All</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => playAllLikedSongs(true)}
-                      className="h-10 flex items-center justify-center gap-2 rounded-full bg-card/90 border border-white/10 px-4 text-xs font-semibold text-foreground transition-transform active:scale-95 hover:bg-muted"
+                      className="h-10 w-full flex items-center justify-center gap-2 rounded-full bg-card/90 border border-white/10 px-4 text-xs font-bold text-foreground transition-transform active:scale-95 hover:bg-muted truncate"
                       aria-label="Shuffle liked songs"
                     >
-                      <ShuffleIcon size={15} />
-                      <span>Shuffle</span>
+                      <ShuffleIcon size={16} className="shrink-0" />
+                      <span className="truncate">Shuffle</span>
                     </button>
-                  </>
+                  </div>
                 )}
 
-                {/* Download All liked songs button */}
-                {unDownloadedLikedCount > 0 ? (
+                {/* Line 2: Download All & Auto-Download - Structured 50/50 single line */}
+                <div className="grid grid-cols-2 gap-2.5 w-full">
+                  {unDownloadedLikedCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={handleDownloadAllLiked}
+                      className="h-10 w-full flex items-center justify-center gap-2 rounded-full bg-secondary/80 hover:bg-secondary border border-white/10 px-3 text-xs font-semibold text-secondary-foreground transition-all active:scale-95 truncate"
+                      title="Download all liked songs to offline storage"
+                    >
+                      <DownloadIcon size={15} className="shrink-0" />
+                      <span className="truncate">Download All ({unDownloadedLikedCount})</span>
+                    </button>
+                  ) : allLikedSongs.length > 0 ? (
+                    <div className="h-10 w-full flex items-center justify-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-3 text-xs font-semibold text-emerald-400 truncate">
+                      <CheckIcon size={15} className="shrink-0" />
+                      <span className="truncate">All downloaded</span>
+                    </div>
+                  ) : (
+                    <div className="h-10 w-full" />
+                  )}
+
+                  {/* Auto-download Liked Songs Toggle with live status */}
                   <button
                     type="button"
-                    onClick={handleDownloadAllLiked}
-                    className="h-10 flex items-center justify-center gap-2 rounded-full bg-secondary/80 hover:bg-secondary border border-white/10 px-3.5 text-xs font-semibold text-secondary-foreground transition-all active:scale-95"
-                    title="Download all liked songs to offline storage"
+                    onClick={() => handleToggleAutoDownloadLiked(!autoDownloadLiked)}
+                    className={cn(
+                      "h-10 w-full flex items-center justify-center gap-2 rounded-full px-3 text-xs font-semibold border transition-all active:scale-95 select-none truncate",
+                      autoDownloadLiked
+                        ? "bg-primary/15 text-primary border-primary/30"
+                        : "bg-card/90 text-muted-foreground border-white/10 hover:text-foreground",
+                    )}
+                    title="When enabled, automatically downloads all old and new liked songs to listen offline"
                   >
-                    <DownloadIcon size={15} />
-                    <span>Download All ({unDownloadedLikedCount})</span>
+                    <DownloadIcon size={15} className="shrink-0" />
+                    <span className="truncate">Auto-download {autoDownloadLiked ? "ON" : "OFF"}</span>
                   </button>
-                ) : allLikedSongs.length > 0 ? (
-                  <div className="h-10 flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-3.5 text-xs font-semibold text-emerald-400">
-                    <CheckIcon size={15} />
-                    <span>All downloaded</span>
-                  </div>
-                ) : null}
-
-                {/* Auto-download Liked Songs Toggle with live status */}
-                <button
-                  type="button"
-                  onClick={() => handleToggleAutoDownloadLiked(!autoDownloadLiked)}
-                  className={cn(
-                    "h-10 flex items-center justify-center gap-2 rounded-full px-3.5 text-xs font-semibold border transition-all active:scale-95 select-none",
-                    autoDownloadLiked
-                      ? "bg-primary/15 text-primary border-primary/30"
-                      : "bg-card/90 text-muted-foreground border-white/10 hover:text-foreground",
-                  )}
-                  title="When enabled, automatically downloads all old and new liked songs to listen offline"
-                >
-                  <DownloadIcon size={15} />
-                  <span>Auto-download {autoDownloadLiked ? "ON" : "OFF"}</span>
-                </button>
+                </div>
               </div>
             </div>
 

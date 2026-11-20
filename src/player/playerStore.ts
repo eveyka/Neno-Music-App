@@ -98,6 +98,7 @@ type PlayerControllerMethod =
   | "generateQueueAfter"
   | "warmTrack"
   | "handleAudioOutputDeviceChanged"
+  | "resumeAfterCall"
   | "tickTransition"
   | "checkBackgroundTrackEnded"
   | "handleTrackEndedViaBridge";
@@ -110,6 +111,8 @@ class ActivePlayerController implements PlayerControllerActions {
   handleTrackEndedViaBridge = () => tabManager.getActivePlayer().handleTrackEndedViaBridge();
   handleAudioOutputDeviceChanged = () =>
     tabManager.getActivePlayer().handleAudioOutputDeviceChanged();
+  resumeAfterCall = (positionSec: number) =>
+    tabManager.getActivePlayer().resumeAfterCall(positionSec);
   loadTrack = async (track: Parameters<PlayerController["loadTrack"]>[0]) =>
     (await tabManager.claimFocusedPlayer()).loadTrack(track);
   playTrackById = async (

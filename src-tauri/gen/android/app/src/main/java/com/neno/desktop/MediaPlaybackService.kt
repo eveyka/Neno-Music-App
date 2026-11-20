@@ -166,16 +166,16 @@ class MediaPlaybackService : Service() {
         resumeOnFocusGain = false
         stopCallModeMonitoring()
 
-        // Wait 400ms for Android audioserver to restore media routing from telecom to media HAL
+        // Wait 450ms for Android audioserver to restore media routing from telecom to media HAL
         resumeHandler.postDelayed({
-            // Force refresh hardware audio output route so the underlying AAudio stream is freshly recreated
-            sendMediaCommand("audioDeviceChanged")
-
+            val resumePos = if (positionSec > 0L) positionSec else lastPlaybackPositionSec
             if (shouldResume) {
-                // Auto-resume playback on the fresh stream
-                scheduleResumePlayback(350L)
+                // Resume playback directly on the freshly recreated audio stream at exact timestamp
+                sendMediaCommand("resumeFromCall:$resumePos")
+            } else {
+                sendMediaCommand("audioDeviceChanged")
             }
-        }, 400L)
+        }, 450L)
     }
 
     private fun scheduleResumePlayback(delayMs: Long) {
@@ -310,6 +310,7 @@ class MediaPlaybackService : Service() {
     private var cachedFallbackIcon: Bitmap? = null
     private var durationSec: Long = 0L
     private var positionSec: Long = 0L
+    private var lastPlaybackPositionSec: Long = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -571,6 +572,9 @@ class MediaPlaybackService : Service() {
         if (!isTransient && !isCallOngoing) {
             resumeOnFocusGain = false
             resumeAfterCall = false
+        }
+        if (positionSec > 0L) {
+            lastPlaybackPositionSec = positionSec
         }
         pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
         pendingResumeRunnable = null
