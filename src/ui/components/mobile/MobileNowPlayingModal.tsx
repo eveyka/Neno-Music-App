@@ -310,6 +310,36 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
   );
 });
 
+const ShimmerQueueRow = memo(function ShimmerQueueRow({ index }: { index: number }) {
+  return (
+    <div
+      style={{ animationDelay: `${index * 100}ms` }}
+      className="relative overflow-hidden flex items-center justify-between gap-3 py-2.5 px-3 rounded-2xl bg-[#171717] border border-white/10 my-1 shadow-xs"
+    >
+      {/* Shimmer light sweep */}
+      <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
+
+      {/* Album Art Placeholder */}
+      <div className="size-11 shrink-0 rounded-xl bg-white/10 border border-white/5" />
+
+      {/* Text Lines */}
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div
+          className="h-3.5 rounded-md bg-white/15"
+          style={{ width: `${60 + (index % 3) * 15}%` }}
+        />
+        <div
+          className="h-2.5 rounded-md bg-white/10"
+          style={{ width: `${35 + (index % 2) * 20}%` }}
+        />
+      </div>
+
+      {/* Drag handle placeholder */}
+      <div className="size-6 rounded-md bg-white/5 shrink-0" />
+    </div>
+  );
+});
+
 interface SleepTimerButtonProps {
   onClick: () => void;
 }
@@ -469,6 +499,29 @@ export function MobileNowPlayingModal({
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+
+  // Real-time zero-lag bottom sheet gesture refs
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const sheetTouchStartYRef = useRef<number | null>(null);
+  const sheetTouchStartXRef = useRef<number | null>(null);
+  const sheetInitialPxRef = useRef<number>(0);
+  const isSheetDraggingRef = useRef(false);
+
+  // Double-tap 5-sec skip state & refs
+  const [skipAnimation, setSkipAnimation] = useState<{
+    side: "left" | "right";
+    seconds: number;
+    timestamp: number;
+  } | null>(null);
+  const skipAnimationTimeoutRef = useRef<number | null>(null);
+  const lastArtworkTapRef = useRef<{ time: number; side: "left" | "right" } | null>(null);
+
+  const getSheetPxForState = useCallback((state: QueueSheetState) => {
+    if (typeof window === "undefined") return 0;
+    if (state === "full") return 0;
+    if (state === "half") return Math.round(window.innerHeight * 0.46);
+    return Math.max(0, window.innerHeight - 52);
+  }, []);
 
   const navigateArtist = useArtistNavigation();
 
@@ -788,42 +841,125 @@ export function MobileNowPlayingModal({
     }, 3500);
   };
 
-  // Handle touch events on the drag handle / sheet header
+  // Double-tap or double-click on artwork to skip 5 seconds forward / rewind
+  const handleArtworkClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!currentTrack) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const isRight = clickX > rect.width / 2;
+      const side: "left" | "right" = isRight ? "right" : "left";
+      const now = Date.now();
+
+      if (
+        lastArtworkTapRef.current &&
+        lastArtworkTapRef.current.side === side &&
+        now - lastArtworkTapRef.current.time < 380
+      ) {
+        lastArtworkTapRef.current = null;
+        const delta = isRight ? 5 : -5;
+        const current = playerController.getCurrentTime();
+        const duration = currentTrack.durationSec || Infinity;
+        const target = Math.max(0, Math.min(current + delta, duration));
+        void playerController.seekTo(target);
+
+        setSkipAnimation({ side, seconds: 5, timestamp: now });
+        if (skipAnimationTimeoutRef.current) {
+          window.clearTimeout(skipAnimationTimeoutRef.current);
+        }
+        skipAnimationTimeoutRef.current = window.setTimeout(() => {
+          setSkipAnimation(null);
+        }, 650);
+
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          try {
+            navigator.vibrate(25);
+          } catch {
+            // ignore
+          }
+        }
+      } else {
+        lastArtworkTapRef.current = { time: now, side };
+      }
+    },
+    [currentTrack],
+  );
+
+  // Handle touch events on the drag handle / sheet header with real-time tracking
   const handleSheetTouchStart = (e: React.TouchEvent) => {
-    touchStartYRef.current = e.touches[0].clientY;
-    touchStartXRef.current = e.touches[0].clientX;
+    sheetTouchStartYRef.current = e.touches[0].clientY;
+    sheetTouchStartXRef.current = e.touches[0].clientX;
+    sheetInitialPxRef.current = getSheetPxForState(queueSheetState);
+    isSheetDraggingRef.current = false;
+    if (sheetRef.current) {
+      sheetRef.current.style.transition = "none";
+    }
+  };
+
+  const handleSheetTouchMove = (e: React.TouchEvent) => {
+    if (sheetTouchStartYRef.current === null || sheetTouchStartXRef.current === null) return;
+    const deltaY = e.touches[0].clientY - sheetTouchStartYRef.current;
+    const deltaX = e.touches[0].clientX - sheetTouchStartXRef.current;
+
+    if (!isSheetDraggingRef.current) {
+      if (Math.abs(deltaY) > 6 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        isSheetDraggingRef.current = true;
+      } else if (Math.abs(deltaX) > 12) {
+        return;
+      }
+    }
+
+    if (isSheetDraggingRef.current && sheetRef.current) {
+      const maxPx = Math.max(0, window.innerHeight - 52);
+      const targetPx = Math.max(0, Math.min(maxPx, sheetInitialPxRef.current + deltaY));
+      sheetRef.current.style.transform = `translate3d(0, ${targetPx}px, 0)`;
+    }
   };
 
   const handleSheetTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartYRef.current === null) return;
-    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
-    const deltaX = touchStartXRef.current
-      ? e.changedTouches[0].clientX - touchStartXRef.current
-      : 0;
+    if (sheetTouchStartYRef.current === null) return;
+    const deltaY = e.changedTouches[0].clientY - sheetTouchStartYRef.current;
+    const wasDragging = isSheetDraggingRef.current;
 
-    touchStartYRef.current = null;
-    touchStartXRef.current = null;
+    sheetTouchStartYRef.current = null;
+    sheetTouchStartXRef.current = null;
+    isSheetDraggingRef.current = false;
 
-    if (Math.abs(deltaY) > 30 && Math.abs(deltaY) > Math.abs(deltaX)) {
-      if (deltaY < 0) {
-        // Swiped UP
-        if (queueSheetState === "collapsed") {
-          setQueueSheetState("half");
-        } else if (queueSheetState === "half") {
-          setQueueSheetState("full");
+    let nextState: QueueSheetState = queueSheetState;
+
+    if (wasDragging) {
+      if (queueSheetState === "collapsed") {
+        if (deltaY < -200) {
+          nextState = "full";
+        } else if (deltaY < -25) {
+          nextState = "half";
+        } else {
+          nextState = "collapsed";
         }
-      } else {
-        // Swiped DOWN
-        if (queueSheetState === "full") {
-          setQueueSheetState("half");
-        } else if (queueSheetState === "half") {
-          setQueueSheetState("collapsed");
-        } else if (queueSheetState === "collapsed") {
-          // In collapsed state, swiping down on queue bar minimizes player
-          onClose();
+      } else if (queueSheetState === "half") {
+        if (deltaY < -50) {
+          nextState = "full";
+        } else if (deltaY > 50) {
+          nextState = "collapsed";
+        } else {
+          nextState = "half";
+        }
+      } else if (queueSheetState === "full") {
+        if (deltaY > 200) {
+          nextState = "collapsed";
+        } else if (deltaY > 40) {
+          nextState = "half";
+        } else {
+          nextState = "full";
         }
       }
     }
+
+    if (sheetRef.current) {
+      sheetRef.current.style.transition = "transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)";
+      sheetRef.current.style.transform = "";
+    }
+    setQueueSheetState(nextState);
   };
 
   // Touch gestures on main player body / poster / controls to swipe up or down
@@ -831,6 +967,32 @@ export function MobileNowPlayingModal({
     if (audioMode === "lyrics") return;
     touchStartYRef.current = e.touches[0].clientY;
     touchStartXRef.current = e.touches[0].clientX;
+    if (queueSheetState === "collapsed") {
+      sheetInitialPxRef.current = getSheetPxForState("collapsed");
+      isSheetDraggingRef.current = false;
+      if (sheetRef.current) {
+        sheetRef.current.style.transition = "none";
+      }
+    }
+  };
+
+  const handlePlayerBodyTouchMove = (e: React.TouchEvent) => {
+    if (audioMode === "lyrics" || touchStartYRef.current === null || touchStartXRef.current === null) return;
+    const deltaY = e.touches[0].clientY - touchStartYRef.current;
+    const deltaX = e.touches[0].clientX - touchStartXRef.current;
+
+    if (queueSheetState === "collapsed" && deltaY < 0) {
+      if (!isSheetDraggingRef.current) {
+        if (Math.abs(deltaY) > 6 && Math.abs(deltaY) > Math.abs(deltaX)) {
+          isSheetDraggingRef.current = true;
+        }
+      }
+      if (isSheetDraggingRef.current && sheetRef.current) {
+        const maxPx = Math.max(0, window.innerHeight - 52);
+        const targetPx = Math.max(0, Math.min(maxPx, sheetInitialPxRef.current + deltaY));
+        sheetRef.current.style.transform = `translate3d(0, ${targetPx}px, 0)`;
+      }
+    }
   };
 
   const handlePlayerBodyTouchEnd = (e: React.TouchEvent) => {
@@ -846,15 +1008,20 @@ export function MobileNowPlayingModal({
       : 0;
     touchStartYRef.current = null;
     touchStartXRef.current = null;
+    isSheetDraggingRef.current = false;
 
-    if (Math.abs(deltaY) > 30 && Math.abs(deltaY) > Math.abs(deltaX)) {
-      if (deltaY < -40) {
-        // Swiped UP -> expand queue sheet
-        if (queueSheetState === "collapsed") {
-          setQueueSheetState("half");
-        } else if (queueSheetState === "half") {
-          setQueueSheetState("full");
-        }
+    if (sheetRef.current) {
+      sheetRef.current.style.transition = "transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)";
+      sheetRef.current.style.transform = "";
+    }
+
+    if (Math.abs(deltaY) > 25 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      if (deltaY < -200) {
+        // Swiped UP far -> full queue sheet
+        setQueueSheetState("full");
+      } else if (deltaY < -30) {
+        // Swiped UP slightly -> half queue sheet ("thora sa scrool krne se half tk outhna chyea")
+        setQueueSheetState("half");
       } else if (deltaY > 35) {
         // Swiped DOWN
         if (queueSheetState === "full") {
@@ -902,7 +1069,7 @@ export function MobileNowPlayingModal({
     if (queueTouchStartYRef.current === null) return;
     const deltaY = e.changedTouches[0].clientY - queueTouchStartYRef.current;
 
-    if (queueScrollTopRef.current <= 0 && deltaY > 40) {
+    if (queueScrollTopRef.current <= 0 && deltaY > 35) {
       if (queueSheetState === "full") {
         setQueueSheetState("half");
       } else if (queueSheetState === "half") {
@@ -1113,6 +1280,7 @@ export function MobileNowPlayingModal({
           {queueSheetState !== "full" && (
             <div
               onTouchStart={audioMode === "audio" ? handlePlayerBodyTouchStart : undefined}
+              onTouchMove={audioMode === "audio" ? handlePlayerBodyTouchMove : undefined}
               onTouchEnd={audioMode === "audio" ? handlePlayerBodyTouchEnd : undefined}
               className={cn(
                 "flex flex-1 flex-col overflow-hidden z-10",
@@ -1122,11 +1290,12 @@ export function MobileNowPlayingModal({
               {/* ── AUDIO MODE VIEW ── */}
               {audioMode === "audio" ? (
                 <div className="flex flex-1 flex-col justify-between overflow-hidden pb-1">
-                  {/* Square Contained Artwork Card (YouTube Music Style) */}
+                  {/* Square Contained Artwork Card (YouTube Music Style with Double-Tap 5s Skip) */}
                   <div className="flex flex-1 items-center justify-center px-6 py-2 min-h-0">
                     <div
+                      onClick={handleArtworkClick}
                       className={cn(
-                        "relative overflow-hidden rounded-2xl shadow-[0_16px_44px_rgba(0,0,0,0.85)] select-none border border-white/5",
+                        "relative overflow-hidden rounded-2xl shadow-[0_16px_44px_rgba(0,0,0,0.85)] select-none border border-white/5 cursor-pointer",
                         queueSheetState === "half"
                           ? "size-36 sm:size-44 aspect-square"
                           : "w-[84vw] max-w-[340px] max-h-[38vh] aspect-square",
@@ -1134,8 +1303,30 @@ export function MobileNowPlayingModal({
                     >
                       <TrackArtwork
                         artworkUrl={currentTrack?.artworkUrl}
-                        className="size-full object-cover"
+                        className="size-full object-cover pointer-events-none"
                       />
+                      {/* Double-tap 5s Skip Visual Feedback Overlay */}
+                      {skipAnimation && (
+                        <div
+                          className={cn(
+                            "absolute inset-y-0 w-1/2 z-30 flex flex-col items-center justify-center pointer-events-none select-none transition-all duration-200",
+                            skipAnimation.side === "left"
+                              ? "left-0 bg-gradient-to-r from-black/80 via-black/45 to-transparent rounded-l-2xl"
+                              : "right-0 bg-gradient-to-l from-black/80 via-black/45 to-transparent rounded-r-2xl",
+                          )}
+                        >
+                          <div className="flex flex-col items-center justify-center gap-1.5 animate-in zoom-in-90 fade-in duration-150">
+                            <div className="flex size-11 items-center justify-center rounded-full bg-white/25 backdrop-blur-md text-white border border-white/30 shadow-lg">
+                              <span className="text-sm font-black tracking-wider">
+                                {skipAnimation.side === "right" ? "+5s" : "-5s"}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-bold text-white drop-shadow-md tracking-wider uppercase">
+                              {skipAnimation.side === "right" ? "Forward 5s" : "Rewind 5s"}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                       {isLoading && (
                         <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2.5 transition-all">
                           <div className="size-12 rounded-full bg-black/75 border border-white/20 flex items-center justify-center shadow-lg">
@@ -1464,16 +1655,17 @@ export function MobileNowPlayingModal({
         {/* ── UP NEXT QUEUE BOTTOM SHEET (Only in Audio Mode) ── */}
         {audioMode === "audio" && (
           <div
+            ref={sheetRef}
             style={{
               transform:
                 queueSheetState === "full"
                   ? "translate3d(0, 0%, 0)"
                   : queueSheetState === "half"
-                  ? "translate3d(0, 48%, 0)"
-                  : "translate3d(0, calc(100% - 50px), 0)",
+                  ? "translate3d(0, 46%, 0)"
+                  : "translate3d(0, calc(100% - 52px), 0)",
             }}
             className={cn(
-              "fixed inset-x-0 bottom-0 top-0 z-40 flex flex-col transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform",
+              "fixed inset-x-0 bottom-0 top-0 z-40 flex flex-col transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] will-change-transform",
               queueSheetState === "full"
                 ? "bg-[#0a0a0a] text-foreground"
                 : queueSheetState === "half"
@@ -1484,6 +1676,7 @@ export function MobileNowPlayingModal({
             {/* DRAG HANDLE & HEADER BAR */}
             <div
               onTouchStart={handleSheetTouchStart}
+              onTouchMove={handleSheetTouchMove}
               onTouchEnd={handleSheetTouchEnd}
               onClick={() => {
                 if (queueSheetState === "collapsed") {
@@ -1595,9 +1788,21 @@ export function MobileNowPlayingModal({
                 className="flex-1 overflow-y-auto overscroll-contain px-3 pb-20 touch-pan-y"
               >
                 {upcomingTracks.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center text-white/50 text-xs">
-                    <p>No upcoming tracks in queue.</p>
-                  </div>
+                  isLoading || queue.length <= 1 ? (
+                    <div className="flex flex-col py-2">
+                      <div className="flex items-center gap-2 px-2 pb-2 text-xs font-semibold text-white/50">
+                        <SpinnerSteps size={14} className="text-primary" />
+                        <span>Loading upcoming tracks...</span>
+                      </div>
+                      {[0, 1, 2, 3, 4].map((i) => (
+                        <ShimmerQueueRow key={i} index={i} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12 text-center text-white/50 text-xs">
+                      <p>No upcoming tracks in queue.</p>
+                    </div>
+                  )
                 ) : (
                   upcomingTracks.map(({ track, absoluteIndex }) => (
                     <SwipeableQueueRow

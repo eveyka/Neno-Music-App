@@ -539,6 +539,19 @@ html[data-fx-off~="marquee"] .animate-marquee-vertical {
   }
 }
 
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.6s infinite ease-in-out;
+}
+
 .spinner-steps {
   display: inline-block;
   animation: spinner-steps var(--spinner-duration, 0.8s)
