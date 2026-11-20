@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CylinderCarousel } from "@/components/motion/cylinder-carousel";
 import { PlayActiveIcon, RefreshIcon } from "@/ui/icons";
+import { SpinnerSteps } from "@/components/motion/loader";
 import { cn } from "@/lib/utils";
 import type { Album, Artist, BrowseLink, BrowsePage, Playlist, SpeedDialItem, Track } from "../../datasource/types";
 import type { LibraryController, LibraryState } from "../../player/LibraryController";
@@ -211,6 +212,7 @@ export function HomePage({
   const showMadeForYou = useMadeForYouVisible();
   const showYtmHomeFeed = useYtmHomeFeedVisible();
   const [selectedMood, setSelectedMood] = useState<string>("");
+  const [loadingMoodId, setLoadingMoodId] = useState<string | null>(null);
   const recentlyPlayed = useMemo(
     () => libraryState.library?.recentlyPlayed ?? EMPTY_TRACKS,
     [libraryState.library],
@@ -655,6 +657,7 @@ export function HomePage({
       setSelectedMood(nextMood);
 
       if (!nextMood) {
+        setLoadingMoodId(null);
         // Deselected: restore home feed
         if (persistentHomeFeed) {
           setYtmHomeFeed(persistentHomeFeed);
@@ -665,6 +668,7 @@ export function HomePage({
         return;
       }
 
+      setLoadingMoodId(nextMood);
       setIsLoadingHomeFeed(true);
       setIsLoadingSuggestions(true);
 
@@ -725,6 +729,7 @@ export function HomePage({
       } finally {
         setIsLoadingHomeFeed(false);
         setIsLoadingSuggestions(false);
+        setLoadingMoodId(null);
       }
     },
     [libraryController, searchController, selectedMood],
@@ -890,19 +895,23 @@ export function HomePage({
             if (dynamicChips && dynamicChips.length > 0) {
               return dynamicChips.map((chip) => {
                 const isSelected = selectedMood === chip.title;
+                const isChipLoading = loadingMoodId === chip.title;
                 return (
                   <button
                     key={`${chip.title}:${chip.params ?? ""}`}
                     type="button"
                     onClick={() => void handleMoodSelect(chip.title, chip)}
                     className={cn(
-                      "shrink-0 snap-center rounded-lg px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 cursor-pointer select-none border",
+                      "shrink-0 snap-center rounded-lg px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 cursor-pointer select-none border flex items-center gap-1.5",
                       isSelected
                         ? "bg-white text-black border-white shadow-sm font-bold"
                         : "bg-white/[0.08] hover:bg-white/[0.14] text-white/90 border-white/[0.08]",
                     )}
                   >
-                    {chip.title}
+                    {isChipLoading && (
+                      <SpinnerSteps size={12} className="text-black shrink-0" />
+                    )}
+                    <span>{chip.title}</span>
                   </button>
                 );
               });
@@ -911,19 +920,23 @@ export function HomePage({
             // Fallback: standard YouTube Music chips
             return MOOD_FILTERS.map((mood) => {
               const isSelected = selectedMood === mood.id;
+              const isChipLoading = loadingMoodId === mood.id;
               return (
                 <button
                   key={mood.id}
                   type="button"
                   onClick={() => void handleMoodSelect(mood.id)}
                   className={cn(
-                    "shrink-0 snap-center rounded-lg px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 cursor-pointer select-none border",
+                    "shrink-0 snap-center rounded-lg px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all duration-200 active:scale-95 cursor-pointer select-none border flex items-center gap-1.5",
                     isSelected
                       ? "bg-white text-black border-white shadow-sm font-bold"
                       : "bg-white/[0.08] hover:bg-white/[0.14] text-white/90 border-white/[0.08]",
                   )}
                 >
-                  {mood.label}
+                  {isChipLoading && (
+                    <SpinnerSteps size={12} className="text-black shrink-0" />
+                  )}
+                  <span>{mood.label}</span>
                 </button>
               );
             });
@@ -949,7 +962,25 @@ export function HomePage({
 
       {/* ── 1. Topmost: Daily Discover Songs (Direct songs, NO title) ─────── */}
       <section className="w-full">
-        {dailyDiscoverTracks.length > 0 ? (
+        {loadingMoodId ? (
+          /* INSTANT SWIMMING SHIMMER CARDS FOR DISCOVER */
+          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-1 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar overscroll-x-contain">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="w-[84vw] max-w-[340px] aspect-[4/5] min-h-[340px] shrink-0 snap-center rounded-3xl overflow-hidden bg-neutral-900 border border-white/10 relative shadow-2xl"
+              >
+                {/* Swimming light sweep */}
+                <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/15 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                <div className="absolute bottom-6 left-6 right-6 flex flex-col gap-2.5">
+                  <div className="h-6 w-3/4 rounded-xl bg-white/15" />
+                  <div className="h-4 w-1/2 rounded-lg bg-white/10" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : dailyDiscoverTracks.length > 0 ? (
           <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-1 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain">
             {dailyDiscoverTracks.map((track) => (
               <DailyDiscoverCard
@@ -964,12 +995,13 @@ export function HomePage({
             {Array.from({ length: 3 }).map((_, i) => (
               <div
                 key={i}
-                className="w-[84vw] max-w-[340px] aspect-[4/5] min-h-[340px] shrink-0 snap-center rounded-3xl overflow-hidden bg-neutral-900/60 border border-white/10 relative"
+                className="w-[84vw] max-w-[340px] aspect-[4/5] min-h-[340px] shrink-0 snap-center rounded-3xl overflow-hidden bg-neutral-900 border border-white/10 relative shadow-2xl"
               >
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent animate-pulse" />
-                <div className="absolute bottom-6 left-6 right-6 flex flex-col gap-2">
-                  <div className="h-6 w-3/4 rounded-lg bg-white/10 animate-pulse" />
-                  <div className="h-4 w-1/2 rounded-md bg-white/10 animate-pulse" />
+                <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/15 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                <div className="absolute bottom-6 left-6 right-6 flex flex-col gap-2.5">
+                  <div className="h-6 w-3/4 rounded-xl bg-white/15" />
+                  <div className="h-4 w-1/2 rounded-lg bg-white/10" />
                 </div>
               </div>
             ))}
@@ -977,8 +1009,32 @@ export function HomePage({
         ) : null}
       </section>
 
+      {/* ── Mood Loading Swimming Shimmer Shelves ── */}
+      {loadingMoodId && (
+        <section className="flex flex-col gap-3 my-2 animate-in fade-in duration-200">
+          <div className="relative overflow-hidden h-6 w-44 rounded-lg bg-white/10">
+            <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:gap-2.5 sm:[grid-template-columns:repeat(auto-fill,minmax(14.5rem,1fr))]">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="relative overflow-hidden flex items-center gap-2.5 rounded-2xl border border-white/[0.08] bg-card/60 p-2 shadow-xs"
+              >
+                <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
+                <div className="size-11 shrink-0 rounded-xl bg-white/10" />
+                <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                  <div className="h-3 w-3/4 rounded-md bg-white/15" />
+                  <div className="h-2.5 w-1/2 rounded-md bg-white/10" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ── 2. Speed dial ─────────────────────────────────────────────────── */}
-      {libraryState.status === "ready" && (speedDialItems.length > 0 || isLoadingHomeFeed) && (
+      {libraryState.status === "ready" && !loadingMoodId && (speedDialItems.length > 0 || isLoadingHomeFeed) && (
         <SpeedDialSection
           items={speedDialItems}
           account={libraryState.library?.account}
@@ -992,13 +1048,13 @@ export function HomePage({
       )}
 
       {/* ── 3. Quick Destinations (Library, Browse, History, Downloads) ───── */}
-      <HomeDestinations {...destinations} />
+      {!loadingMoodId && <HomeDestinations {...destinations} />}
 
       {/* ── 4. Made for you ───────────────────────────────────────────────── */}
-      {showMadeForYou && madeForYouSection}
+      {showMadeForYou && !loadingMoodId && madeForYouSection}
 
       {/* ── 5. Trending community Playlist ────────────────────────────────── */}
-      {showYtmHomeFeed && libraryState.status === "ready" && (
+      {showYtmHomeFeed && libraryState.status === "ready" && !loadingMoodId && (
         trendingCommunityShelf ? (
           <div className="flex flex-col gap-2.5">
             <BrowseShelves
@@ -1018,7 +1074,7 @@ export function HomePage({
         ) : null
       )}
 
-      {compactRecent.length === 0 && isWaitingForLibrary && (
+      {compactRecent.length === 0 && isWaitingForLibrary && !loadingMoodId && (
         <section className="flex flex-col gap-2.5">
           <h2 className="text-xl font-bold tracking-tight text-foreground">Recently played</h2>
           <div
@@ -1051,7 +1107,7 @@ export function HomePage({
         </section>
       )}
 
-      {compactRecent.length > 0 && (
+      {compactRecent.length > 0 && !loadingMoodId && (
         <section className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold tracking-tight text-foreground">Recently played</h2>
@@ -1104,7 +1160,7 @@ export function HomePage({
       )}
 
       {/* ── 7. Remaining Shelves (Artists, Recommended Albums, Featured Playlists, Hits) ── */}
-      {showYtmHomeFeed && libraryState.status === "ready" && (
+      {showYtmHomeFeed && libraryState.status === "ready" && !loadingMoodId && (
         remainingOtherShelves.length > 0 ? (
           <div className="flex flex-col gap-5 sm:gap-6">
             <BrowseShelves

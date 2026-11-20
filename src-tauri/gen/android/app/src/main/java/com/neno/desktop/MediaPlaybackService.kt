@@ -5,6 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.bluetooth.BluetoothA2dp
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothHeadset
+import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -112,8 +116,11 @@ class MediaPlaybackService : Service() {
     private val imageExecutor = Executors.newSingleThreadExecutor()
 
     private var audioManager: AudioManager? = null
-    private var resumeOnFocusGain: Boolean = false
-    private var resumeAfterCall: Boolean = false
+    // Interruption State Management ("Shift System")
+    private var pausedDueToInterruption: Boolean = false
+    private var isInterruptedByCall: Boolean = false
+    private var isInterruptedByAudioFocus: Boolean = false
+    private var isInterruptedByBluetoothShift: Boolean = false
     private var isCallOngoing: Boolean = false
     private var isCallMonitoringActive: Boolean = false
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -160,10 +167,10 @@ class MediaPlaybackService : Service() {
 
     private fun handleCallEnded() {
         val wasOngoing = isCallOngoing
-        val shouldResume = wasOngoing && (resumeAfterCall || resumeOnFocusGain)
+        val shouldResume = (wasOngoing || isInterruptedByCall) && pausedDueToInterruption
         isCallOngoing = false
-        resumeAfterCall = false
-        resumeOnFocusGain = false
+        pausedDueToInterruption = false
+        isInterruptedByCall = false
         stopCallModeMonitoring()
 
         pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
@@ -197,54 +204,41 @@ class MediaPlaybackService : Service() {
                 val inCall = isSystemInCallMode()
                 if (inCall || isCallOngoing) {
                     isCallOngoing = true
-                    resumeAfterCall = true
-                    resumeOnFocusGain = true
+                    pausedDueToInterruption = true
+                    isInterruptedByCall = true
                     startCallModeMonitoring()
                     if (isPlaying || currentPlaybackState == "playing") {
                         dispatchPause(isTransient = true)
                     }
                 } else {
-                    // Permanent focus loss to another media app (e.g. user started Spotify, YouTube, etc.)
-                    resumeOnFocusGain = false
-                    resumeAfterCall = false
-                    isCallOngoing = false
-                    stopCallModeMonitoring()
-                    pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
-                    pendingResumeRunnable = null
+                    // Video playback or other media in another app (YouTube, browser, etc.)
                     if (isPlaying || currentPlaybackState == "playing") {
-                        dispatchPause(isTransient = false)
+                        pausedDueToInterruption = true
+                        isInterruptedByAudioFocus = true
+                        // Pause cleanly without abandoning audio focus so we receive AUDIOFOCUS_GAIN when finished
+                        dispatchPause(isTransient = true)
                     }
                 }
             }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 val inCall = isSystemInCallMode()
                 if (inCall) {
-                    // Call mode active (cellular call, WhatsApp call, etc.)
                     isCallOngoing = true
-                    resumeAfterCall = true
-                    resumeOnFocusGain = true
+                    pausedDueToInterruption = true
+                    isInterruptedByCall = true
                     startCallModeMonitoring()
                     if (isPlaying || currentPlaybackState == "playing") {
                         dispatchPause(isTransient = true)
                     }
                 } else {
-                    // Video playback or other transient media in another app (Instagram Reels, YouTube, browser, etc.)
-                    // Pause the song, but DO NOT run any timer/call monitoring!
-                    // It will remain paused until the other video stops and Android issues AUDIOFOCUS_GAIN.
-                    isCallOngoing = false
-                    resumeAfterCall = false
-                    stopCallModeMonitoring()
-                    pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
-                    pendingResumeRunnable = null
-
+                    // Video playback in social apps (Instagram Reels, Twitter, Reddit, etc.) or transient media
                     if (isPlaying || currentPlaybackState == "playing") {
-                        resumeOnFocusGain = true
+                        pausedDueToInterruption = true
+                        isInterruptedByAudioFocus = true
                         dispatchPause(isTransient = true)
                     }
                 }
-            }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                // Notifications, navigation alerts, chimes: DO NOT pause music playback
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 if (isCallOngoing) {
@@ -253,10 +247,12 @@ class MediaPlaybackService : Service() {
                         return@OnAudioFocusChangeListener
                     }
                     handleCallEnded()
-                } else if (resumeOnFocusGain && !isCallOngoing) {
-                    resumeOnFocusGain = false
-                    // The other video/media has officially finished or closed, and yielded audio focus back.
-                    scheduleResumePlayback(350L)
+                } else if (pausedDueToInterruption && (isInterruptedByAudioFocus || isInterruptedByBluetoothShift)) {
+                    pausedDueToInterruption = false
+                    isInterruptedByAudioFocus = false
+                    isInterruptedByBluetoothShift = false
+                    // The other video/media has officially finished or yielded audio focus back; auto-resume!
+                    scheduleResumePlayback(300L)
                 }
             }
         }
@@ -372,6 +368,40 @@ class MediaPlaybackService : Service() {
         routeChangeHandler.postDelayed(runnable, delayMs)
     }
 
+    private fun handleBluetoothConnecting() {
+        if (!isAudioRouteMonitoringActive || isCallOngoing) return
+        // When bluetooth device begins connecting, pause playback momentarily so no audio glitch/stutter occurs
+        if (isPlaying || currentPlaybackState == "playing") {
+            pausedDueToInterruption = true
+            isInterruptedByBluetoothShift = true
+            dispatchPause(isTransient = true)
+        }
+    }
+
+    private fun handleBluetoothConnected() {
+        if (!isAudioRouteMonitoringActive || isCallOngoing) return
+        // Allow Android Bluetooth A2DP audio link to settle (850ms)
+        routeChangeHandler.removeCallbacksAndMessages(null)
+        routeChangeHandler.postDelayed({
+            sendMediaCommand("audioDeviceChanged")
+            if (pausedDueToInterruption && isInterruptedByBluetoothShift) {
+                pausedDueToInterruption = false
+                isInterruptedByBluetoothShift = false
+                scheduleResumePlayback(400L)
+            }
+        }, 850L)
+    }
+
+    private fun handleBluetoothDisconnected() {
+        // Standard Android behavior: pause playback immediately so music does not blast on phone speakers in public!
+        if (isPlaying || currentPlaybackState == "playing") {
+            pausedDueToInterruption = false // Do not auto-play through phone speaker
+            isInterruptedByBluetoothShift = false
+            dispatchPause(isTransient = false)
+        }
+        notifyAudioDeviceChanged(500L)
+    }
+
     private fun registerAudioRouteMonitoring() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -379,11 +409,35 @@ class MediaPlaybackService : Service() {
                 if (am != null) {
                     audioDeviceCallback = object : android.media.AudioDeviceCallback() {
                         override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) {
-                            notifyAudioDeviceChanged(500L)
+                            val hasHeadsetOrBt = addedDevices?.any { dev ->
+                                dev.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                                dev.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                                dev.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                                dev.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dev.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET)
+                            } ?: false
+
+                            if (hasHeadsetOrBt) {
+                                handleBluetoothConnected()
+                            } else {
+                                notifyAudioDeviceChanged(500L)
+                            }
                         }
 
                         override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
-                            notifyAudioDeviceChanged(500L)
+                            val hadHeadsetOrBt = removedDevices?.any { dev ->
+                                dev.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                                dev.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                                dev.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                                dev.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dev.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET)
+                            } ?: false
+
+                            if (hadHeadsetOrBt) {
+                                handleBluetoothDisconnected()
+                            } else {
+                                notifyAudioDeviceChanged(500L)
+                            }
                         }
                     }
                     try {
@@ -395,11 +449,25 @@ class MediaPlaybackService : Service() {
             audioRouteReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
                     when (intent?.action) {
-                        android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED,
-                        android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED,
+                        android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                            handleBluetoothConnecting()
+                        }
+                        android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                            handleBluetoothDisconnected()
+                        }
                         android.bluetooth.BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED,
+                        android.bluetooth.BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
                         AudioManager.ACTION_HEADSET_PLUG -> {
-                            notifyAudioDeviceChanged(500L)
+                            val state = intent.getIntExtra(android.bluetooth.BluetoothProfile.EXTRA_STATE, -1)
+                            if (state == android.bluetooth.BluetoothProfile.STATE_CONNECTED) {
+                                handleBluetoothConnected()
+                            } else if (state == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
+                                handleBluetoothDisconnected()
+                            } else if (state == android.bluetooth.BluetoothProfile.STATE_CONNECTING) {
+                                handleBluetoothConnecting()
+                            } else {
+                                notifyAudioDeviceChanged(600L)
+                            }
                         }
                     }
                 }
@@ -408,6 +476,7 @@ class MediaPlaybackService : Service() {
                 addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED)
                 addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
                 addAction(android.bluetooth.BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
+                addAction(android.bluetooth.BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
                 addAction(AudioManager.ACTION_HEADSET_PLUG)
             }
             try {
@@ -448,15 +517,7 @@ class MediaPlaybackService : Service() {
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
-                if (isPlaying) {
-                    resumeOnFocusGain = false
-                    resumeAfterCall = false
-                    isCallOngoing = false
-                    dispatchPause(isTransient = false)
-                }
-                // When headphones or bluetooth unplugged/disconnected, schedule route change
-                // so switching to phone speaker doesn't fail on opening the audio device!
-                notifyAudioDeviceChanged(500L)
+                handleBluetoothDisconnected()
             }
         }
     }
@@ -514,18 +575,16 @@ class MediaPlaybackService : Service() {
             TelephonyManager.CALL_STATE_OFFHOOK -> {
                 // Phone call incoming or active!
                 if (isPlaying || currentPlaybackState == "playing") {
-                    resumeAfterCall = true
-                    resumeOnFocusGain = true
+                    pausedDueToInterruption = true
+                    isInterruptedByCall = true
                     isCallOngoing = true
                     startCallModeMonitoring()
                     dispatchPause(isTransient = true)
-                } else if (state == TelephonyManager.CALL_STATE_OFFHOOK && isCallOngoing) {
-                    // Call answered while already paused for ringing
                 }
             }
             TelephonyManager.CALL_STATE_IDLE -> {
                 // Call ended ("call cut hone ke baad")! Auto-resume playback on fresh stream.
-                if (isCallOngoing || resumeAfterCall || resumeOnFocusGain) {
+                if (isCallOngoing || isInterruptedByCall) {
                     handleCallEnded()
                 }
             }
@@ -561,8 +620,10 @@ class MediaPlaybackService : Service() {
         pendingResumeRunnable = null
         isPlaying = true
         currentPlaybackState = "playing"
-        resumeOnFocusGain = false
-        resumeAfterCall = false
+        pausedDueToInterruption = false
+        isInterruptedByCall = false
+        isInterruptedByAudioFocus = false
+        isInterruptedByBluetoothShift = false
         isCallOngoing = false
         requestAudioFocus()
         acquireWakeLock()
@@ -572,9 +633,11 @@ class MediaPlaybackService : Service() {
     }
 
     private fun dispatchPause(isTransient: Boolean = false) {
-        if (!isTransient && !isCallOngoing) {
-            resumeOnFocusGain = false
-            resumeAfterCall = false
+        if (!isTransient && !isCallOngoing && !pausedDueToInterruption) {
+            pausedDueToInterruption = false
+            isInterruptedByCall = false
+            isInterruptedByAudioFocus = false
+            isInterruptedByBluetoothShift = false
         }
         if (positionSec > 0L) {
             lastPlaybackPositionSec = positionSec
@@ -583,7 +646,7 @@ class MediaPlaybackService : Service() {
         pendingResumeRunnable = null
         isPlaying = false
         currentPlaybackState = "paused"
-        if (!isTransient) {
+        if (!isTransient && !pausedDueToInterruption) {
             abandonAudioFocus()
         }
         releaseWakeLock()
@@ -602,7 +665,10 @@ class MediaPlaybackService : Service() {
                     }
 
                     override fun onPause() {
-                        resumeOnFocusGain = false
+                        pausedDueToInterruption = false
+                        isInterruptedByCall = false
+                        isInterruptedByAudioFocus = false
+                        isInterruptedByBluetoothShift = false
                         dispatchPause(isTransient = false)
                     }
 
@@ -634,7 +700,10 @@ class MediaPlaybackService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                resumeOnFocusGain = false
+                pausedDueToInterruption = false
+                isInterruptedByCall = false
+                isInterruptedByAudioFocus = false
+                isInterruptedByBluetoothShift = false
                 abandonAudioFocus()
                 unregisterNoisyReceiver()
                 releaseWakeLock(immediate = true)
@@ -643,11 +712,13 @@ class MediaPlaybackService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_PLAY -> {
-                resumeOnFocusGain = false
                 dispatchPlay()
             }
             ACTION_PAUSE -> {
-                resumeOnFocusGain = false
+                pausedDueToInterruption = false
+                isInterruptedByCall = false
+                isInterruptedByAudioFocus = false
+                isInterruptedByBluetoothShift = false
                 dispatchPause(isTransient = false)
             }
             ACTION_NEXT -> {
@@ -687,13 +758,16 @@ class MediaPlaybackService : Service() {
 
                 if (newIsPlaying || newPlaybackState == "loading" || newPlaybackState == "playing") {
                     isPlaying = (newPlaybackState == "playing" || newPlaybackState == "loading")
-                    resumeOnFocusGain = false
+                    pausedDueToInterruption = false
+                    isInterruptedByCall = false
+                    isInterruptedByAudioFocus = false
+                    isInterruptedByBluetoothShift = false
                     requestAudioFocus()
                     acquireWakeLock()
                     registerNoisyReceiver()
                 } else {
                     isPlaying = false
-                    if (!resumeOnFocusGain) {
+                    if (!pausedDueToInterruption) {
                         abandonAudioFocus()
                     }
                     releaseWakeLock()

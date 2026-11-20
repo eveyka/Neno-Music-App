@@ -559,6 +559,12 @@ export function MobileNowPlayingModal({
     return Math.max(0, window.innerHeight - 44);
   }, []);
 
+  const getSheetTransform = useCallback((state: QueueSheetState) => {
+    if (state === "full") return "translate3d(0, 0%, 0)";
+    if (state === "half") return "translate3d(0, 48%, 0)";
+    return "translate3d(0, calc(100% - 44px), 0)";
+  }, []);
+
   const navigateArtist = useArtistNavigation();
 
   const handleArtistClick = (artistRef: { id?: string; name: string }) => {
@@ -957,14 +963,6 @@ export function MobileNowPlayingModal({
             onClose();
           }
           return;
-        } else if (deltaY < -28) {
-          // Swiped UP on poster -> open Up Next!
-          if (deltaY < -180) {
-            setQueueSheetState("full");
-          } else {
-            setQueueSheetState("half");
-          }
-          return;
         }
       }
 
@@ -1069,83 +1067,9 @@ export function MobileNowPlayingModal({
 
     if (sheetRef.current) {
       sheetRef.current.style.transition = "transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)";
-      sheetRef.current.style.transform = "";
+      sheetRef.current.style.transform = getSheetTransform(nextState);
     }
     setQueueSheetState(nextState);
-  };
-
-  // Touch gestures on main player body / poster / controls to swipe up or down
-  const handlePlayerBodyTouchStart = (e: React.TouchEvent) => {
-    if (audioMode === "lyrics") return;
-    touchStartYRef.current = e.touches[0].clientY;
-    touchStartXRef.current = e.touches[0].clientX;
-    if (queueSheetState === "collapsed") {
-      sheetInitialPxRef.current = getSheetPxForState("collapsed");
-      isSheetDraggingRef.current = false;
-      if (sheetRef.current) {
-        sheetRef.current.style.transition = "none";
-      }
-    }
-  };
-
-  const handlePlayerBodyTouchMove = (e: React.TouchEvent) => {
-    if (audioMode === "lyrics" || touchStartYRef.current === null || touchStartXRef.current === null) return;
-    const deltaY = e.touches[0].clientY - touchStartYRef.current;
-    const deltaX = e.touches[0].clientX - touchStartXRef.current;
-
-    if (queueSheetState === "collapsed" && deltaY < 0) {
-      if (!isSheetDraggingRef.current) {
-        if (Math.abs(deltaY) > 6 && Math.abs(deltaY) > Math.abs(deltaX)) {
-          isSheetDraggingRef.current = true;
-        }
-      }
-      if (isSheetDraggingRef.current && sheetRef.current) {
-        const maxPx = Math.max(0, window.innerHeight - 52);
-        const targetPx = Math.max(0, Math.min(maxPx, sheetInitialPxRef.current + deltaY));
-        sheetRef.current.style.transform = `translate3d(0, ${targetPx}px, 0)`;
-      }
-    }
-  };
-
-  const handlePlayerBodyTouchEnd = (e: React.TouchEvent) => {
-    if (audioMode === "lyrics") {
-      touchStartYRef.current = null;
-      touchStartXRef.current = null;
-      return;
-    }
-    if (touchStartYRef.current === null) return;
-    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
-    const deltaX = touchStartXRef.current
-      ? e.changedTouches[0].clientX - touchStartXRef.current
-      : 0;
-    touchStartYRef.current = null;
-    touchStartXRef.current = null;
-    isSheetDraggingRef.current = false;
-
-    if (sheetRef.current) {
-      sheetRef.current.style.transition = "transform 0.28s cubic-bezier(0.25, 1, 0.5, 1)";
-      sheetRef.current.style.transform = "";
-    }
-
-    if (Math.abs(deltaY) > 25 && Math.abs(deltaY) > Math.abs(deltaX)) {
-      if (deltaY < -200) {
-        // Swiped UP far -> full queue sheet
-        setQueueSheetState("full");
-      } else if (deltaY < -30) {
-        // Swiped UP slightly -> half queue sheet ("thora sa scrool krne se half tk outhna chyea")
-        setQueueSheetState("half");
-      } else if (deltaY > 35) {
-        // Swiped DOWN
-        if (queueSheetState === "full") {
-          setQueueSheetState("half");
-        } else if (queueSheetState === "half") {
-          setQueueSheetState("collapsed");
-        } else if (queueSheetState === "collapsed") {
-          // Return to mini player
-          onClose();
-        }
-      }
-    }
   };
 
   // Header specific touch gestures (swipe down anywhere on header minimizes)
@@ -1476,9 +1400,6 @@ export function MobileNowPlayingModal({
           {/* ── MAIN PLAYER CONTENT (Collapsed & Half States) ── */}
           {queueSheetState !== "full" && (
             <div
-              onTouchStart={audioMode === "audio" ? handlePlayerBodyTouchStart : undefined}
-              onTouchMove={audioMode === "audio" ? handlePlayerBodyTouchMove : undefined}
-              onTouchEnd={audioMode === "audio" ? handlePlayerBodyTouchEnd : undefined}
               className={cn(
                 "flex flex-1 flex-col overflow-hidden z-10",
                 queueSheetState === "half" ? "pb-[52vh]" : audioMode === "lyrics" ? "pb-2" : "pb-16",
@@ -1897,20 +1818,15 @@ export function MobileNowPlayingModal({
           <div
             ref={sheetRef}
             style={{
-              transform:
-                queueSheetState === "full"
-                  ? "translate3d(0, 0%, 0)"
-                  : queueSheetState === "half"
-                  ? "translate3d(0, 48%, 0)"
-                  : "translate3d(0, calc(100% - 44px), 0)",
+              transform: getSheetTransform(queueSheetState),
             }}
             className={cn(
               "fixed inset-x-0 bottom-0 top-0 z-40 flex flex-col transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] will-change-transform",
               queueSheetState === "full"
-                ? "bg-[#0a0a0a]/95 backdrop-blur-2xl text-foreground"
+                ? "bg-[#0a0a0a]/95 backdrop-blur-2xl text-foreground pointer-events-auto"
                 : queueSheetState === "half"
-                ? "bg-[#121215]/85 backdrop-blur-2xl rounded-t-3xl border-t border-white/20 shadow-[0_-16px_48px_rgba(0,0,0,0.9),inset_0_1px_0_0_rgba(255,255,255,0.2)]"
-                : "bg-[#121215]/80 backdrop-blur-xl border-t border-white/15 cursor-pointer shadow-[0_-8px_24px_rgba(0,0,0,0.6)]",
+                ? "bg-[#121215]/85 backdrop-blur-2xl rounded-t-3xl border-t border-white/20 shadow-[0_-16px_48px_rgba(0,0,0,0.9),inset_0_1px_0_0_rgba(255,255,255,0.2)] pointer-events-auto"
+                : "bg-[#121215]/80 backdrop-blur-xl border-t border-white/15 shadow-[0_-8px_24px_rgba(0,0,0,0.6)] pointer-events-none",
             )}
           >
             {/* DRAG HANDLE & HEADER BAR */}
@@ -1923,7 +1839,7 @@ export function MobileNowPlayingModal({
                   setQueueSheetState("half");
                 }
               }}
-              className="flex shrink-0 flex-col pt-2 pb-2 px-4 cursor-grab active:cursor-grabbing select-none"
+              className="flex shrink-0 flex-col pt-2 pb-2 px-4 cursor-pointer select-none pointer-events-auto"
             >
               {/* STAGE 2: STICKY MINI PLAYER BAR */}
               {queueSheetState === "full" && (
