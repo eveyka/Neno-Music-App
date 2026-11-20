@@ -824,10 +824,10 @@ export default function App() {
       id: String(Date.now()),
       title,
       message: rawError.replace(/^Playback failed\.?\s*/i, ""),
-      actionLabel: "Skip",
+      actionLabel: "Retry",
       onAction: () => {
         setInAppToast(null);
-        void playerController.skipToNext();
+        void playerController.play();
       },
     });
 

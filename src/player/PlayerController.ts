@@ -196,7 +196,7 @@ export class PlayerController {
   private prematureEndTrackId: string | null = null;
   private pendingSeekTime: number | null = null;
   private lastValidPlaybackPositionSec = 0;
-  private autoSkipTimer: ReturnType<typeof setTimeout> | null = null;
+  private isRecoveringPlayback = false;
   private radioQueueRequestId = 0;
   /*
    * "End queue on this song": the queue entry after which playback stops.
@@ -643,6 +643,23 @@ export class PlayerController {
           this.setState({ status: "playing", error: null });
         }
         if (!playbackStarted) {
+          // If playback failed to start at seek position, retry THIS SAME TRACK from 0:00 (1st se play kro)
+          logInternalWarn("PlayerController.play seek playback failed, retrying same track from 0:00");
+          this.loadedTrackId = null;
+          this.pendingSeekTime = null;
+          this.lastValidPlaybackPositionSec = 0;
+          this.audioEngine.stop();
+          try {
+            await setOutputDevice(null);
+          } catch {
+            // ignore
+          }
+          await this.ensureTrackLoaded(track);
+          playbackStarted = await this.playLoadedTrack();
+          if (playbackStarted) {
+            this.setState({ status: "playing", error: null });
+            return;
+          }
           this.setState({ status: "paused", error: null });
           return;
         }
@@ -692,10 +709,6 @@ export class PlayerController {
   private lastSkipPrevTime = 0;
 
   async skipToNext(): Promise<void> {
-    if (this.autoSkipTimer) {
-      clearTimeout(this.autoSkipTimer);
-      this.autoSkipTimer = null;
-    }
     const now = Date.now();
     if (now - this.lastSkipNextTime < 350) return;
     this.lastSkipNextTime = now;
@@ -1061,7 +1074,13 @@ export class PlayerController {
 
     await this.playTrackById(track.id);
     if (position > 0 && this.loadedTrackId === track.id) {
-      await this.seekTo(position);
+      try {
+        await this.seekTo(position);
+      } catch (seekErr) {
+        logInternalWarn("PlayerController.recoverFromPrematureEnd seek failed, playing from 0:00", {
+          error: seekErr instanceof Error ? seekErr.message : String(seekErr),
+        });
+      }
     }
     return true;
   }
@@ -1077,6 +1096,7 @@ export class PlayerController {
    */
   async handleAudioOutputDeviceChanged(): Promise<void> {
     if (!usesRustAudioEngine()) return;
+    if (this.isRecoveringPlayback) return;
 
     logInternalInfo("PlayerController.handleAudioOutputDeviceChanged refreshing audio output route");
 
@@ -1084,23 +1104,14 @@ export class PlayerController {
     const wasPlaying = this.state.status === "playing";
     const position = this.lastValidPlaybackPositionSec > 0 ? this.lastValidPlaybackPositionSec : this.getCurrentTime();
 
-    // setOutputDevice in Rust drops the old stream and re-opens the device sink.
-    // Try up to 3 times with backoff in case Android audio HAL is still settling.
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        await setOutputDevice(null);
-        break;
-      } catch (error) {
-        logInternalWarn(`PlayerController.handleAudioOutputDeviceChanged setOutputDevice attempt ${attempt + 1} failed`, {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        if (attempt < 2) {
-          await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
-        }
-      }
+    try {
+      await setOutputDevice(null);
+    } catch (err) {
+      logInternalWarn("PlayerController.handleAudioOutputDeviceChanged setOutputDevice failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
-    // Always clear loadedTrackId and stop the audio engine so stale binding is purged.
     this.loadedTrackId = null;
     this.audioEngine.stop();
     this.pendingSeekTime = position > 0 ? position : null;
@@ -1109,11 +1120,21 @@ export class PlayerController {
       try {
         await this.ensureTrackLoaded(track);
         if (position > 0) {
-          this.audioEngine.seekTo(position);
+          try {
+            this.audioEngine.seekTo(position);
+          } catch {
+            // ignore
+          }
         }
         if (wasPlaying) {
           const started = await this.playLoadedTrack();
           if (started) {
+            this.setState({ status: "playing", error: null });
+          } else {
+            // Fall back to beginning 0:00 if position seek failed
+            this.pendingSeekTime = null;
+            this.lastValidPlaybackPositionSec = 0;
+            await this.playLoadedTrack();
             this.setState({ status: "playing", error: null });
           }
         }
@@ -1126,60 +1147,93 @@ export class PlayerController {
   }
 
   /**
-   * Resumes playback after a phone call has ended without restarting from 0:00.
-   * Recreates the audio output route and restores the exact position where playback was interrupted.
+   * Resumes playback after a phone call has ended without skipping to another track.
+   * First tries resuming from the saved position; if that fails or errors, cleanly restarts
+   * THIS SAME TRACK from the beginning (0:00) so playback is preserved without crashing or jumping tracks.
    */
   async resumeAfterCall(positionSec: number): Promise<void> {
-    logInternalInfo("PlayerController.resumeAfterCall", {
-      positionSec,
-      lastValid: this.lastValidPlaybackPositionSec,
-      currentTrackId: this.state.currentTrack?.id,
-    });
-
     const track = this.state.currentTrack;
     if (!track) return;
+
+    if (this.isRecoveringPlayback) return;
+    this.isRecoveringPlayback = true;
 
     const resumePos = positionSec > 0 
       ? positionSec 
       : (this.lastValidPlaybackPositionSec > 0 ? this.lastValidPlaybackPositionSec : this.getCurrentTime());
 
-    if (usesRustAudioEngine()) {
-      for (let attempt = 0; attempt < 3; attempt++) {
+    logInternalInfo("PlayerController.resumeAfterCall", {
+      positionSec,
+      resumePos,
+      currentTrackId: track.id,
+    });
+
+    try {
+      if (usesRustAudioEngine()) {
         try {
           await setOutputDevice(null);
-          break;
-        } catch {
-          if (attempt < 2) {
-            await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+        } catch (err) {
+          logInternalWarn("PlayerController.resumeAfterCall setOutputDevice failed", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+
+        let started = false;
+
+        // 1st Attempt: If we had a valid position > 2 seconds, try resuming at that position
+        if (resumePos > 2) {
+          try {
+            this.loadedTrackId = null;
+            this.audioEngine.stop();
+            this.pendingSeekTime = resumePos;
+            await this.ensureTrackLoaded(track);
+            try {
+              this.audioEngine.seekTo(resumePos);
+            } catch {
+              // ignore seek failure
+            }
+            started = await this.playLoadedTrack();
+            if (started) {
+              this.setState({ status: "playing", error: null });
+            }
+          } catch (resumeErr) {
+            logInternalWarn("PlayerController.resumeAfterCall resume at timestamp failed, retrying from 0:00", {
+              error: resumeErr instanceof Error ? resumeErr.message : String(resumeErr),
+            });
           }
         }
-      }
 
-      this.loadedTrackId = null;
-      this.audioEngine.stop();
-      this.pendingSeekTime = resumePos > 0 ? resumePos : null;
-
-      try {
-        await this.ensureTrackLoaded(track);
-        if (resumePos > 0) {
-          this.audioEngine.seekTo(resumePos);
+        // 2nd Attempt: If resuming at timestamp didn't start, play THIS SAME TRACK from 0:00 (1st se play kro)
+        if (!started) {
+          logInternalInfo("PlayerController.resumeAfterCall playing track from beginning (0:00)");
+          this.loadedTrackId = null;
+          this.pendingSeekTime = null;
+          this.lastValidPlaybackPositionSec = 0;
+          this.audioEngine.stop();
+          try {
+            await setOutputDevice(null);
+          } catch {
+            // ignore
+          }
+          await this.ensureTrackLoaded(track);
+          started = await this.playLoadedTrack();
+          if (started) {
+            this.setState({ status: "playing", error: null });
+          } else {
+            this.setState({ status: "paused", error: null });
+          }
         }
-        const started = await this.playLoadedTrack();
-        if (started) {
-          this.setState({ status: "playing", error: null });
-        }
-      } catch (error) {
-        logInternalWarn("PlayerController.resumeAfterCall reload failed", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        this.setError(error);
+      } else {
+        // Web audio / iframe mode
+        await this.play();
       }
-    } else {
-      if (resumePos > 0) {
-        this.pendingSeekTime = resumePos;
-        this.audioEngine.seekTo(resumePos);
-      }
-      await this.play();
+    } catch (finalError) {
+      logInternalWarn("PlayerController.resumeAfterCall failed", {
+        error: finalError instanceof Error ? finalError.message : String(finalError),
+      });
+      this.setState({ status: "paused", error: null });
+    } finally {
+      this.isRecoveringPlayback = false;
     }
   }
 
@@ -2247,20 +2301,15 @@ export class PlayerController {
 
     const isYtError2 = detail.includes("YouTube player error 2");
     const isEmbedRestricted = detail.includes("101") || detail.includes("150");
-    const canSkip = this.queue.all.length > 1;
 
     let friendly = detail && detail !== "[object Object]"
       ? detail
       : "Playback failed. Check internal logs for details.";
 
     if (isYtError2) {
-      friendly = canSkip
-        ? "Track stream unplayable on this device. Auto-skipping to next..."
-        : "Track stream unplayable on this device.";
+      friendly = "Track stream unplayable on this device.";
     } else if (isEmbedRestricted) {
-      friendly = canSkip
-        ? "Track playback restricted by owner. Auto-skipping to next..."
-        : "Track playback restricted by owner.";
+      friendly = "Track playback restricted by owner.";
     }
 
     this.setState({
@@ -2269,19 +2318,6 @@ export class PlayerController {
       // Preserve currentTrack to prevent reversion to hardcoded track
       currentTrack: this.state.currentTrack,
     });
-
-    if (canSkip && !this.handlingTrackEnd) {
-      if (this.autoSkipTimer) {
-        clearTimeout(this.autoSkipTimer);
-      }
-      this.autoSkipTimer = setTimeout(() => {
-        this.autoSkipTimer = null;
-        if (this.state.status === "error") {
-          logInternalInfo("PlayerController auto-skipping unplayable track");
-          void this.skipToNext();
-        }
-      }, 1500);
-    }
   }
 
   private emit() {
@@ -2364,7 +2400,13 @@ export class PlayerController {
     }
 
     logInternalInfo("PlayerController.seekTo track already loaded, seeking...");
-    this.audioEngine.seekTo(seekTime);
+    try {
+      this.audioEngine.seekTo(seekTime);
+    } catch (err) {
+      logInternalWarn("PlayerController.seekTo failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     this.emit();
   }
 

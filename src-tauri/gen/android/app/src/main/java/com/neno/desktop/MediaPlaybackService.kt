@@ -166,6 +166,9 @@ class MediaPlaybackService : Service() {
         resumeOnFocusGain = false
         stopCallModeMonitoring()
 
+        pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
+        pendingResumeRunnable = null
+
         // Wait 450ms for Android audioserver to restore media routing from telecom to media HAL
         resumeHandler.postDelayed({
             val resumePos = if (positionSec > 0L) positionSec else lastPlaybackPositionSec
@@ -250,10 +253,10 @@ class MediaPlaybackService : Service() {
                         return@OnAudioFocusChangeListener
                     }
                     handleCallEnded()
-                } else if (resumeOnFocusGain) {
+                } else if (resumeOnFocusGain && !isCallOngoing) {
                     resumeOnFocusGain = false
                     // The other video/media has officially finished or closed, and yielded audio focus back.
-                    scheduleResumePlayback(250L)
+                    scheduleResumePlayback(350L)
                 }
             }
         }
