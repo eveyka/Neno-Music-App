@@ -24,6 +24,32 @@ android {
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "14").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.14")
     }
+    signingConfigs {
+        create("release") {
+            val keystoreFile = listOf(
+                file("neno-release.keystore"),
+                file("../neno-release.keystore"),
+                rootProject.file("neno-release.keystore")
+            ).firstOrNull { it.exists() }
+
+            if (keystoreFile != null) {
+                storeFile = keystoreFile
+                storePassword = "neno123"
+                keyAlias = "neno"
+                keyPassword = "neno123"
+                enableV1Signing = true
+                enableV2Signing = true
+            } else {
+                val debugKeystore = signingConfigs.getByName("debug")
+                storeFile = debugKeystore.storeFile
+                storePassword = debugKeystore.storePassword
+                keyAlias = debugKeystore.keyAlias
+                keyPassword = debugKeystore.keyPassword
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
     buildTypes {
         getByName("debug") {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
@@ -39,7 +65,7 @@ android {
         }
         getByName("release") {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
