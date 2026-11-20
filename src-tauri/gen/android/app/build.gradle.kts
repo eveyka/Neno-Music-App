@@ -17,12 +17,12 @@ android {
     compileSdk = 36
     namespace = "com.neno.desktop"
     defaultConfig {
-        manifestPlaceholders["usesCleartextTraffic"] = "true"
+        manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "com.neno.desktop"
         minSdk = 26
         targetSdk = 36
-        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "15").toInt()
-        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.15")
+        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
+        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.1")
     }
     signingConfigs {
         create("release") {

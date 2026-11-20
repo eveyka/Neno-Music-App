@@ -292,7 +292,7 @@ export function ArtistView({
     const url = getArtistUrl(displayedArtist);
     const result = await shareContent({
       title: displayedArtist.name,
-      text: `Listen to ${displayedArtist.name} on Neno Music`,
+      text: `Listen to ${displayedArtist.name} on Neon Music`,
       url,
     });
     if (result.copied) {

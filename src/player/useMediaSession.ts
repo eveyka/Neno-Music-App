@@ -244,7 +244,7 @@ export function useMediaSession(
         ? new MediaMetadata({
             title: track.title,
             artist: track.artist,
-            album: track.album || "Neno Music",
+            album: track.album || "Neon Music",
             artwork: hdUrl
               ? [
                   { src: hdUrl, sizes: "128x128", type: "image/jpeg" },

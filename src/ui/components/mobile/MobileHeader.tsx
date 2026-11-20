@@ -54,13 +54,13 @@ function MobileHeaderInner({
       >
         <img
           src={appIcon}
-          alt="Neno"
+          alt="Neon"
           className="size-8 object-contain shrink-0 select-none drop-shadow-md"
           draggable={false}
         />
         <div className="flex items-center gap-1.5">
           <span className="text-[15px] font-extrabold tracking-tight text-foreground leading-none">
-            Neno
+            Neon
           </span>
           <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary tracking-wide uppercase">
             Music

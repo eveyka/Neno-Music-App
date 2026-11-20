@@ -216,7 +216,7 @@ export function PlaylistContextMenuProvider({
     const url = getAlbumUrl(album);
     const result = await shareContent({
       title: album.title,
-      text: `Check out ${album.title} on Neno Music`,
+      text: `Check out ${album.title} on Neon Music`,
       url,
     });
     if (result.copied) {
@@ -230,7 +230,7 @@ export function PlaylistContextMenuProvider({
     const url = getPlaylistUrl(playlist);
     const result = await shareContent({
       title: playlist.title,
-      text: `Check out ${playlist.title} on Neno Music`,
+      text: `Check out ${playlist.title} on Neon Music`,
       url,
     });
     if (result.copied) {
@@ -543,30 +543,30 @@ export function PlaylistContextMenuProvider({
                   <span>{isSaved ? "Remove from library" : "Save to library"}</span>
                 </button>
               )}
-        </>
-      )}
-    </div>
-  )
-}
-{
-  toast && (
-    <div
-      className="fixed top-14 sm:top-8 left-1/2 -translate-x-1/2 z-[250] flex items-center gap-2.5 rounded-full bg-neutral-900/95 dark:bg-zinc-950/95 px-4 py-2 text-sm font-medium text-white shadow-[0_16px_40px_rgba(0,0,0,0.7)] border border-white/15 backdrop-blur-2xl pointer-events-none select-none whitespace-nowrap animate-in fade-in slide-in-from-top-4 duration-200"
-      role="status"
-    >
-      {isSaving ? (
-        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
-          <Loader variant="spinner" size={14} />
+            </>
+          )}
         </div>
-      ) : (toast.startsWith("Saved ") || toast.startsWith("Removed ") || toast === "Url copied to clipboard" || toast === "Local playlist deleted") ? (
-        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-          <CheckIcon size={14} aria-hidden="true" />
-        </div>
-      ) : null}
-      <span className="text-xs sm:text-sm font-semibold tracking-wide text-white">{toast}</span>
-    </div>
-  )
-}
+      )
+      }
+      {
+        toast && (
+          <div
+            className="fixed top-14 sm:top-8 left-1/2 -translate-x-1/2 z-[250] flex items-center gap-2.5 rounded-full bg-neutral-900/95 dark:bg-zinc-950/95 px-4 py-2 text-sm font-medium text-white shadow-[0_16px_40px_rgba(0,0,0,0.7)] border border-white/15 backdrop-blur-2xl pointer-events-none select-none whitespace-nowrap animate-in fade-in slide-in-from-top-4 duration-200"
+            role="status"
+          >
+            {isSaving ? (
+              <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white">
+                <Loader variant="spinner" size={14} />
+              </div>
+            ) : (toast.startsWith("Saved ") || toast.startsWith("Removed ") || toast === "Url copied to clipboard" || toast === "Local playlist deleted") ? (
+              <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                <CheckIcon size={14} aria-hidden="true" />
+              </div>
+            ) : null}
+            <span className="text-xs sm:text-sm font-semibold tracking-wide text-white">{toast}</span>
+          </div>
+        )
+      }
     </PlaylistContext.Provider >
   );
 }

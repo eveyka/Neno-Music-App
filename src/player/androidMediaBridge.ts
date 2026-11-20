@@ -71,7 +71,7 @@ async function sendServiceAction(
     try {
       if (action === ACTION_UPDATE) {
         bridge.updateMedia(
-          String(payload?.title ?? "Neno"),
+          String(payload?.title ?? "Neon"),
           String(payload?.artist ?? "Playing"),
           Boolean(payload?.isPlaying ?? true),
           payload?.artworkUrl ? String(payload.artworkUrl) : null,

@@ -1347,7 +1347,7 @@ export function SettingsPage({
 
           <section className={SETTINGS_CARD} aria-labelledby="about-settings-title">
             <SettingsCardHeader
-              title="About Neno"
+              title="About Neon"
               titleId="about-settings-title"
               icon={<SettingsIcon size={18} aria-hidden="true" />}
               description="App details, updates, and community links."
@@ -1358,7 +1358,7 @@ export function SettingsPage({
               <div className="flex items-center justify-between gap-3 rounded-xl bg-card/40 border border-border/40 px-3.5 py-3">
                 <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-semibold text-foreground">Neno Music</span>
+                    <span className="text-sm font-semibold text-foreground">Neon Music</span>
                     <span className="rounded-md bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
                       {isAndroid ? "Android" : isMobile ? "Mobile" : "Desktop"}
                     </span>
@@ -1397,11 +1397,11 @@ export function SettingsPage({
                         : `Preparing version ${updateResult.version}...`
                       : updateResult.canInstall
                         ? isAndroid
-                          ? "A new version of Neno is available. You can download and install it directly in-app."
-                          : "A new version of Neno is available to install."
+                          ? "A new version of Neon is available. You can download and install it directly in-app."
+                          : "A new version of Neon is available to install."
                         : isAndroid
                           ? "A new APK release is available. Tap below to download the latest update."
-                          : "A new version of Neno is available to download."}
+                          : "A new version of Neon is available to download."}
                   </p>
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     {updateResult.canInstall && isAndroid && isApkDownloadedLocally(updateResult.version) ? (
@@ -1983,12 +1983,12 @@ export function SettingsPage({
                 title="System"
                 titleId="library-system-title"
                 icon={<SettingsIcon size={18} aria-hidden="true" />}
-                description="How Neno behaves outside the window."
+                description="How Neon behaves outside the window."
               />
 
               <SettingToggle
                 title="Launch at startup"
-                description="Start Neno when your computer starts."
+                description="Start Neon when your computer starts."
                 checked={autostartEnabled}
                 disabled={autostartLoading}
                 onCheckedChange={(checked) => void handleAutostartChange(checked)}
@@ -1999,7 +1999,7 @@ export function SettingsPage({
 
               <SettingToggle
                 title="Minimize to tray"
-                description="Closing the window hides Neno to the system tray and keeps playing. Quit from the tray icon."
+                description="Closing the window hides Neon to the system tray and keeps playing. Quit from the tray icon."
                 checked={minimizeToTray}
                 onCheckedChange={setMinimizeToTray}
               />
@@ -2324,7 +2324,7 @@ export function SettingsPage({
                     {audioEngineMode === "rust"
                       ? "Decoded directly in Rust. Lowest memory, gapless and crossfade support."
                       : audioEngineMode === "native"
-                      ? "Neno plays each track itself. About 90 MB lighter, slower to start, no gapless or crossfade."
+                      ? "Neon plays each track itself. About 90 MB lighter, slower to start, no gapless or crossfade."
                       : "A hidden YouTube frame plays each track. Costs about 90 MB, starts faster, required for gapless and crossfade."}
                   </span>
                 </div>
@@ -2355,7 +2355,7 @@ export function SettingsPage({
                 {audioEngineMode === "rust"
                   ? "Decoded directly in Rust. Lowest memory, gapless and crossfade support."
                   : audioEngineMode === "native"
-                  ? "Neno plays each track itself. About 90 MB lighter, slower to start, no gapless or crossfade."
+                  ? "Neon plays each track itself. About 90 MB lighter, slower to start, no gapless or crossfade."
                   : "A hidden YouTube frame plays each track. Costs about 90 MB, starts faster, required for gapless and crossfade."}
               </p>
 
@@ -2450,7 +2450,7 @@ export function SettingsPage({
               title="Session"
               titleId="session-settings-title"
               icon={<QueuePanelIcon size={18} aria-hidden="true" />}
-              description="What comes back when you reopen Neno."
+              description="What comes back when you reopen Neon."
             />
 
             <SettingToggle

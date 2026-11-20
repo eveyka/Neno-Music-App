@@ -23,13 +23,12 @@ import { getAppSetting, setAppSetting } from "./appSettings";
  */
 const SEEN_VERSION_KEY = "release-note-seen-version";
 
-export const RELEASE_NOTE_BODY = `**Library Redesign** — clean, unnumbered tabs for Downloads, Liked Songs, and Playlists.
-**Structured Liked Songs** — Hero banner now sits cleanly above search and sort filters for a natural, intuitive flow.
-**Sleek Action Controls** — redesigned single-line Play All, Shuffle, and Storage buttons across Downloads and Library.
-**Artist Releases Grid** — beautifully aligned horizontal filter chips (All, Albums, Singles, EPs) and responsive 2-column album cards.
-**Signed Release Build** — official production release signing key with zero Play Protect debug warnings.
+export const RELEASE_NOTE_BODY = `**Welcome to Neon Music** — the ultimate lightweight, high-performance music streaming experience.
+**Beautiful Modern UI** — redesigned floating island cards, smooth transitions, and intuitive hierarchy.
+**Clean Library & Playlists** — uncluttered tabs for Downloads, Liked Songs, and Playlists.
+**Official Production Release** — signed with official release certificate for full stability and security.
 
-Enjoy your listening!`;
+Enjoy your music with Neon!`;
 
 export type ReleaseNoteSegment =
   | { kind: "text"; value: string }

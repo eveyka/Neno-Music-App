@@ -299,7 +299,7 @@ class MediaPlaybackService : Service() {
     private var telephonyManager: TelephonyManager? = null
     private var isNoisyReceiverRegistered: Boolean = false
 
-    private var currentTitle: String = "Neno"
+    private var currentTitle: String = "Neon"
     private var currentArtist: String = "Playing"
     private var isPlaying: Boolean = true
     private var currentPlaybackState: String = "playing" // "playing" | "paused" | "loading" | "idle"
@@ -859,7 +859,7 @@ class MediaPlaybackService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Neno Music Playback",
+                "Neon Music Playback",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Controls and status for music playback"
@@ -930,7 +930,7 @@ class MediaPlaybackService : Service() {
                 val metaBuilder = MediaMetadataCompat.Builder()
                     .putString(MediaMetadataCompat.METADATA_KEY_TITLE, currentTitle)
                     .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentArtist)
-                    .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, "Neno Music")
+                    .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, "Neon Music")
                     .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationSec * 1000L)
 
                 currentArtworkBitmap?.let {
@@ -973,9 +973,9 @@ class MediaPlaybackService : Service() {
             val largeIcon = currentArtworkBitmap ?: getFallbackLargeIcon()
 
             val subTextString = when {
-                isLoading -> "Neno Music • Loading..."
-                !isPlayingNow -> "Neno Music • Paused"
-                else -> "Neno Music"
+                isLoading -> "Neon Music • Loading..."
+                !isPlayingNow -> "Neon Music • Paused"
+                else -> "Neon Music"
             }
 
             val contentTextString = if (isLoading) {

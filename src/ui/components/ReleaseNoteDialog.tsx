@@ -66,7 +66,7 @@ export function ReleaseNoteDialog({ version, onDismiss }: ReleaseNoteDialogProps
                 <div className="relative size-14 shrink-0 rounded-2xl p-0.5 bg-gradient-to-br from-primary/50 via-white/10 to-transparent shadow-[0_8px_24px_rgba(255,0,0,0.28)] ring-1 ring-white/15">
                   <img
                     src={whatsNewIcon}
-                    alt="Neno Music Waveform"
+                    alt="Neon Music Waveform"
                     className="size-full rounded-[14px] object-cover"
                   />
                 </div>
@@ -78,7 +78,7 @@ export function ReleaseNoteDialog({ version, onDismiss }: ReleaseNoteDialogProps
                     </span>
                   </div>
                   <h2 id="release-note-title" className="mt-1 text-2xl font-black tracking-tight text-foreground">
-                    Neno Music <span className="text-primary font-bold">v{version}</span>
+                    Neon Music <span className="text-primary font-bold">v{version}</span>
                   </h2>
                   <p className="mt-0.5 text-xs text-muted-foreground truncate">
                     Explore new features, improvements & performance updates.
