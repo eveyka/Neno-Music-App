@@ -516,12 +516,13 @@ export function MobileNowPlayingModal({
   const skipAnimationTimeoutRef = useRef<number | null>(null);
   const lastArtworkTapRef = useRef<{ time: number; side: "left" | "right" } | null>(null);
   const lastArtworkTouchTimeRef = useRef(0);
+  const artworkTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   const getSheetPxForState = useCallback((state: QueueSheetState) => {
     if (typeof window === "undefined") return 0;
     if (state === "full") return 0;
-    if (state === "half") return Math.round(window.innerHeight * 0.46);
-    return Math.max(0, window.innerHeight - 52);
+    if (state === "half") return Math.round(window.innerHeight * 0.48);
+    return Math.max(0, window.innerHeight - 44);
   }, []);
 
   const navigateArtist = useArtistNavigation();
@@ -885,8 +886,13 @@ export function MobileNowPlayingModal({
   );
 
   const handleArtworkTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    // Isolate poster touches completely so swiping or clicking poster never triggers parent body drag or sheet
     e.stopPropagation();
+    if (e.touches.length === 0) return;
+    artworkTouchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      time: Date.now(),
+    };
   }, []);
 
   const handleArtworkTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
@@ -897,15 +903,47 @@ export function MobileNowPlayingModal({
     (e: React.TouchEvent<HTMLDivElement>) => {
       e.stopPropagation();
       lastArtworkTouchTimeRef.current = Date.now();
-      if (e.changedTouches.length === 0) return;
+      if (!artworkTouchStartRef.current || e.changedTouches.length === 0) return;
+
       const touch = e.changedTouches[0];
-      const rect = e.currentTarget.getBoundingClientRect();
-      const clickX = touch.clientX - rect.left;
-      const isRight = clickX > rect.width / 2;
-      const side: "left" | "right" = isRight ? "right" : "left";
-      triggerDoubleTap(side);
+      const deltaX = touch.clientX - artworkTouchStartRef.current.x;
+      const deltaY = touch.clientY - artworkTouchStartRef.current.y;
+      const duration = Date.now() - artworkTouchStartRef.current.time;
+      artworkTouchStartRef.current = null;
+
+      // 1. Vertical Swipe on Poster:
+      if (Math.abs(deltaY) > 28 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        if (deltaY > 28) {
+          // Swiped DOWN on poster -> minimize player to mini player!
+          if (queueSheetState === "full") {
+            setQueueSheetState("half");
+          } else if (queueSheetState === "half") {
+            setQueueSheetState("collapsed");
+          } else {
+            onClose();
+          }
+          return;
+        } else if (deltaY < -28) {
+          // Swiped UP on poster -> open Up Next!
+          if (deltaY < -180) {
+            setQueueSheetState("full");
+          } else {
+            setQueueSheetState("half");
+          }
+          return;
+        }
+      }
+
+      // 2. Tap on Poster:
+      if (Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20 && duration < 400) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const clickX = touch.clientX - rect.left;
+        const isRight = clickX > rect.width / 2;
+        const side: "left" | "right" = isRight ? "right" : "left";
+        triggerDoubleTap(side);
+      }
     },
-    [triggerDoubleTap],
+    [queueSheetState, onClose, triggerDoubleTap],
   );
 
   // Mouse fallback for double-click on desktop
@@ -1256,14 +1294,29 @@ export function MobileNowPlayingModal({
               onTouchEnd={handleHeaderTouchEnd}
               className="relative flex items-center justify-between px-3 pt-9 pb-2 z-20 transition-colors duration-200"
             >
-              {/* Minimize button */}
+              {/* Minimize button (Sleek modern chevron capsule) */}
               <button
                 type="button"
-                onClick={onClose}
-                className="flex size-10 items-center justify-center rounded-full text-white/90 bg-white/10 backdrop-blur-md border border-white/10 transition-transform active:scale-90 hover:opacity-80 shadow-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }}
+                className="group/min flex size-10 items-center justify-center rounded-full text-white/90 hover:text-white bg-white/[0.08] hover:bg-white/[0.14] active:bg-white/20 border border-white/15 backdrop-blur-xl shadow-[0_4px_16px_rgba(0,0,0,0.4)] transition-all duration-150 active:scale-90 focus:outline-none"
                 aria-label="Minimize now playing"
               >
-                <ChevronDownIcon size={28} />
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-white/90 group-hover/min:text-white transition-transform duration-150 group-active/min:translate-y-0.5"
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
               </button>
 
               {/* Audio (Headphone) vs Lyrics Switcher Pill — absolutely centred so unequal L/R buttons don't shift it */}
@@ -1324,7 +1377,7 @@ export function MobileNowPlayingModal({
               onTouchEnd={audioMode === "audio" ? handlePlayerBodyTouchEnd : undefined}
               className={cn(
                 "flex flex-1 flex-col overflow-hidden z-10",
-                queueSheetState === "half" ? "pb-[52vh]" : audioMode === "lyrics" ? "pb-2" : "pb-14",
+                queueSheetState === "half" ? "pb-[52vh]" : audioMode === "lyrics" ? "pb-2" : "pb-16",
               )}
             >
               {/* ── AUDIO MODE VIEW ── */}
@@ -1418,7 +1471,12 @@ export function MobileNowPlayingModal({
 
                     {/* ACTION PILLS ROW (Like/Dislike, Lyrics, Save, Share, Download) */}
                     {queueSheetState === "collapsed" && (
-                      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+                      <div
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onTouchMove={(e) => e.stopPropagation()}
+                        onTouchEnd={(e) => e.stopPropagation()}
+                        className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 relative z-20"
+                      >
                         {/* Like / Dislike Combined Pill */}
                         <div className="flex items-center rounded-full bg-black/40 backdrop-blur-xl hover:bg-black/50 border border-white/15 h-9 px-3.5 gap-2.5 text-xs font-medium text-white shrink-0 shadow-sm">
                           <button
@@ -1515,16 +1573,31 @@ export function MobileNowPlayingModal({
                     )}
 
                     {/* SEEKBAR PROGRESS */}
-                    <div className="w-full mt-3">
+                    <div
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchMove={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => e.stopPropagation()}
+                      className="w-full mt-3 relative z-20"
+                    >
                       <SeekBar layout="stacked" />
                     </div>
 
                     {/* MAIN TRANSPORT CONTROLS */}
-                    <div className="flex items-center justify-between w-full px-2 mt-2 mb-1">
+                    <div
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchMove={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => e.stopPropagation()}
+                      className="flex items-center justify-between w-full px-2 mt-2 mb-1 relative z-20"
+                    >
                       {/* Shuffle */}
                       <button
                         type="button"
-                        onClick={() => playerController.toggleShuffle()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          playerController.toggleShuffle();
+                        }}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onTouchEnd={(e) => e.stopPropagation()}
                         className={cn(
                           "flex size-11 items-center justify-center transition-all active:scale-85 duration-100 ease-out",
                           isShuffle ? "text-white" : "text-white/70 hover:text-white",
@@ -1537,7 +1610,12 @@ export function MobileNowPlayingModal({
                       {/* Skip Previous */}
                       <button
                         type="button"
-                        onClick={() => void playerController.skipToPrevious()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void playerController.skipToPrevious();
+                        }}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onTouchEnd={(e) => e.stopPropagation()}
                         className="flex size-12 items-center justify-center text-white transition-all active:scale-85 duration-100 ease-out hover:opacity-80"
                         aria-label="Previous track"
                       >
@@ -1547,7 +1625,12 @@ export function MobileNowPlayingModal({
                       {/* Big White Circular Play/Pause */}
                       <button
                         type="button"
-                        onClick={() => void playerController.togglePlayPause()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void playerController.togglePlayPause();
+                        }}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onTouchEnd={(e) => e.stopPropagation()}
                         className="flex size-16 items-center justify-center rounded-full bg-white text-black shadow-2xl active:scale-90 duration-100 ease-out transition-transform"
                         aria-label={isPlaying ? "Pause" : "Play"}
                       >
@@ -1563,7 +1646,12 @@ export function MobileNowPlayingModal({
                       {/* Skip Next */}
                       <button
                         type="button"
-                        onClick={() => void playerController.skipToNext()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void playerController.skipToNext();
+                        }}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onTouchEnd={(e) => e.stopPropagation()}
                         className="flex size-12 items-center justify-center text-white transition-all active:scale-85 duration-100 ease-out hover:opacity-80"
                         aria-label="Next track"
                       >
@@ -1573,7 +1661,12 @@ export function MobileNowPlayingModal({
                       {/* Repeat */}
                       <button
                         type="button"
-                        onClick={() => playerController.cyclePlaybackOrderMode()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          playerController.cyclePlaybackOrderMode();
+                        }}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onTouchEnd={(e) => e.stopPropagation()}
                         className={cn(
                           "flex size-11 items-center justify-center transition-all active:scale-85 duration-100 ease-out",
                           isRepeatAll || isRepeatOne
@@ -1704,8 +1797,8 @@ export function MobileNowPlayingModal({
                 queueSheetState === "full"
                   ? "translate3d(0, 0%, 0)"
                   : queueSheetState === "half"
-                  ? "translate3d(0, 46%, 0)"
-                  : "translate3d(0, calc(100% - 52px), 0)",
+                  ? "translate3d(0, 48%, 0)"
+                  : "translate3d(0, calc(100% - 44px), 0)",
             }}
             className={cn(
               "fixed inset-x-0 bottom-0 top-0 z-40 flex flex-col transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] will-change-transform",
