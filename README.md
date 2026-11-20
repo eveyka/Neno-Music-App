@@ -1,8 +1,8 @@
 <p align="center">
-  <img width="130px" src="assets/img/Logo.png" alt="Neno Music" />
+  <img width="140px" src="assets/app-icon.png" alt="Neon Music Icon" style="border-radius: 28px; box-shadow: 0 8px 24px rgba(255, 0, 50, 0.25);" />
 </p>
 
-<h1 align="center">Neno Music</h1>
+<h1 align="center">Neon Music</h1>
 
 <p align="center">
   <b>A fast, modern, and beautiful music streaming client powered by YouTube Music.</b><br />
@@ -10,58 +10,91 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jupiterbania/Neno-Music-App/releases/latest"><img src="https://img.shields.io/badge/version-v1.0.5-ff3d00?style=for-the-badge" alt="Version 1.0.5"></a>
-  <a href="https://github.com/jupiterbania/Neno-Music-App/releases/latest"><img src="https://img.shields.io/badge/platform-Android%20%7C%20iOS%20%7C%20Windows%20%7C%20macOS%20%7C%20Linux-4f46e5?style=for-the-badge" alt="Platforms"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-0ea5e9?style=for-the-badge" alt="License"></a>
-  <a href="https://github.com/jupiterbania/Neno-Music-App/stargazers"><img src="https://img.shields.io/github/stars/jupiterbania/Neno-Music-App?style=for-the-badge&color=ff9700&label=stars" alt="Stars"></a>
+  <a href="https://github.com/eveyka/Neno-Music-App/releases/tag/v1.0.1"><img src="https://img.shields.io/badge/version-v1.0.1-ff1744?style=for-the-badge&logo=android&logoColor=white" alt="Version 1.0.1"></a>
+  <a href="https://github.com/eveyka/Neno-Music-App/releases/tag/v1.0.1"><img src="https://img.shields.io/badge/platform-Android%20%7C%20iOS%20%7C%20Windows%20%7C%20macOS%20%7C%20Linux-4f46e5?style=for-the-badge" alt="Platforms"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-00e676?style=for-the-badge" alt="License"></a>
+  <a href="https://github.com/eveyka/Neno-Music-App/stargazers"><img src="https://img.shields.io/github/stars/eveyka/Neno-Music-App?style=for-the-badge&color=ff9100&label=stars" alt="Stars"></a>
 </p>
 
 ---
 
-## 🎧 About Neno
+## 🎧 About Neon Music
 
-**Neno** is a lightweight, ad-free, high-performance music application that delivers the entire YouTube Music catalog into a native, responsive, and gorgeous experience. Unlike web tabs and heavy Electron apps, Neno is powered by **Tauri 2** and a **Rust** backend, ensuring instant startup times, minimal memory consumption, and true native desktop and mobile capabilities.
+**Neon Music** is a high-performance, ad-free music streaming client designed to bring the entire YouTube Music catalog into a native, ultra-responsive, and distraction-free environment. 
 
-Whether you're listening on your desktop while gaming or coding, or streaming on your Android smartphone with background playback and lock-screen controls, Neno offers a seamless and premium listening journey.
+Unlike web tabs and bulky Electron wrappers, Neon Music is powered by **Tauri 2** with a native **Rust audio core (Rodio & Symphonia)**. This architecture ensures instant cold starts, minimal battery usage, negligible RAM consumption, and true hardware-accelerated playback across mobile and desktop devices.
 
 > [!NOTE]
-> Neno is an independent, community-driven open-source project and is not affiliated with, authorized, or endorsed by Google or YouTube.
+> Neon Music is an independent, community-driven open-source project and is not affiliated with, authorized, or endorsed by Google or YouTube.
 
 ---
 
-## 📸 Screenshots
+## 📸 Screenshots Showcase
 
 <div align="center">
   <table>
     <tr>
       <td align="center" width="50%">
-        <img src="assets/Screenshoots/Home%20screen.jpg" alt="Home Dashboard" width="360" />
+        <a href="assets/Screenshoots/01_Home_Dashboard.jpg">
+          <img src="assets/Screenshoots/01_Home_Dashboard.jpg" alt="Home Dashboard" width="320" style="border-radius: 14px;" />
+        </a>
         <br />
-        <sub><b>🏠 Home Dashboard</b></sub>
+        <sub><b>🏠 Home Dashboard & Daily Discover</b></sub>
       </td>
       <td align="center" width="50%">
-        <img src="assets/Screenshoots/Music%20Player.jpg" alt="Now Playing & Lyrics" width="360" />
+        <a href="assets/Screenshoots/04_NowPlaying_Player.jpg">
+          <img src="assets/Screenshoots/04_NowPlaying_Player.jpg" alt="Now Playing Player" width="320" style="border-radius: 14px;" />
+        </a>
         <br />
-        <sub><b>🎵 Now Playing & Synced Lyrics</b></sub>
+        <sub><b>🎵 Modern Full-Screen Now Playing</b></sub>
       </td>
     </tr>
     <tr>
       <td align="center" width="50%">
-        <img src="assets/Screenshoots/ArtistAlbum%20Screen.jpg" alt="Artist & Album View" width="360" />
+        <a href="assets/Screenshoots/02_Home_SpeedDial.jpg">
+          <img src="assets/Screenshoots/02_Home_SpeedDial.jpg" alt="Speed Dial & Quick Access" width="320" style="border-radius: 14px;" />
+        </a>
         <br />
-        <sub><b>💿 Artist & Album Details</b></sub>
+        <sub><b>⚡ Speed Dial & Navigation Hub</b></sub>
       </td>
       <td align="center" width="50%">
-        <img src="assets/Screenshoots/Search%20Screen.jpg" alt="Search & Discovery" width="360" />
+        <a href="assets/Screenshoots/05_UpNext_Queue.jpg">
+          <img src="assets/Screenshoots/05_UpNext_Queue.jpg" alt="Up Next Queue Drawer" width="320" style="border-radius: 14px;" />
+        </a>
         <br />
-        <sub><b>🔍 Search & Curated Moods</b></sub>
+        <sub><b>📑 Interactive Up Next Queue Drawer</b></sub>
       </td>
     </tr>
     <tr>
-      <td align="center" colspan="2">
-        <img src="assets/Screenshoots/Satting%20Login%20Screen.jpg" alt="Settings & Account" width="360" />
+      <td align="center" width="50%">
+        <a href="assets/Screenshoots/06_Library_LikedSongs.jpg">
+          <img src="assets/Screenshoots/06_Library_LikedSongs.jpg" alt="Liked Songs & Library" width="320" style="border-radius: 14px;" />
+        </a>
         <br />
-        <sub><b>⚙️ Settings & Account Sync</b></sub>
+        <sub><b>❤️ Organized Library & Liked Songs</b></sub>
+      </td>
+      <td align="center" width="50%">
+        <a href="assets/Screenshoots/07_Playlist_View.jpg">
+          <img src="assets/Screenshoots/07_Playlist_View.jpg" alt="Playlist Details" width="320" style="border-radius: 14px;" />
+        </a>
+        <br />
+        <sub><b>🎶 High-Contrast Playlist View</b></sub>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" width="50%">
+        <a href="assets/Screenshoots/03_Home_Trending.jpg">
+          <img src="assets/Screenshoots/03_Home_Trending.jpg" alt="Trending Community Playlists" width="320" style="border-radius: 14px;" />
+        </a>
+        <br />
+        <sub><b>🔥 Trending Community Playlists</b></sub>
+      </td>
+      <td align="center" width="50%">
+        <a href="assets/Screenshoots/09_Settings_Audio.jpg">
+          <img src="assets/Screenshoots/09_Settings_Audio.jpg" alt="Audio & Playback Settings" width="320" style="border-radius: 14px;" />
+        </a>
+        <br />
+        <sub><b>⚙️ Audio Gapless & Crossfade Controls</b></sub>
       </td>
     </tr>
   </table>
@@ -69,81 +102,66 @@ Whether you're listening on your desktop while gaming or coding, or streaming on
 
 ---
 
-## ✨ Features
+## ✨ Core Features
 
-### 🚀 Instant Performance & Clean Experience
-- **Lightning-Fast Launch**: Opens directly into your music home dashboard without sluggish reload delays or frozen state.
-- **Ultra-Low Memory Footprint**: Native Rust architecture utilizes a fraction of the RAM required by typical browser or Electron clients.
-- **Zero Audio Ads**: Clean and uninterrupted music playback throughout your entire library.
+### 🚀 Instant Performance & Efficiency
+- **Native Rust Audio Engine**: Symphonia & Rodio hardware decoding for lower CPU usage and instant playback responsiveness.
+- **Zero Audio Ads**: Continuous, uninterrupted music playback without intrusive audio commercial interruptions.
+- **Ultra-Lightweight**: Android APK size is only **~11.3 MB** with rapid cold launch.
 
-### 📱 Android Background Playback & Native Integration
-- **Background Audio Service**: Keep listening when your screen is turned off or while using other apps.
-- **Lock Screen & Media Controls**: Rich notifications with play, pause, next, previous, and seekbar controls via Android `MediaSession`.
-- **Audio Focus Management**: Automatically pauses when you receive a phone call and gracefully resumes when finished.
+### 📱 Android Background Playback & Smart System Integration
+- **Persistent Background Playback**: Continuous playback with screen off and while switching between apps.
+- **System Media Controls**: Lock screen and notification shade controls with track art, seekbar, and playback buttons.
+- **Intelligent Phone Call Auto-Resume**: Automatically pauses during incoming/active phone calls and resumes seamlessly at the exact timestamp once the call ends.
+- **Error Auto-Recovery**: Automatic graceful fallback and queue progression if a stream encounters restrictions or network hiccups.
 
-### 🎵 High-Fidelity Audio & Dual Audio Engine
-- **Audio Quality Selection**: Stream at High Quality (256 kbps), Standard Quality, or Low (Data Saver) mode.
-- **Dual Audio Pipeline**: Choose between native high-performance Rust audio processing (Rodio & Symphonia) or standard Web engine.
-- **Smart Gapless & Crossfade**: Smooth transitions between songs for DJ-like continuous flow.
+### 🎵 High-Fidelity Audio & Studio Controls
+- **Audio Quality Options**: Stream at High Quality (256 kbps Opus/AAC), Normal, or Data-Saver modes.
+- **Configurable Crossfade**: Smoothly blend songs together with customizable fade duration (0–12s).
+- **Gapless Handover**: Preload incoming tracks on standby audio decks for zero silence between consecutive songs.
 
-### 🎤 Real-Time Synced Karaoke Lyrics
-- **Line-by-Line Synchronized Lyrics**: Words highlight in real-time as the artist sings.
-- **Interactive Lyric Seeking**: Tap or click any lyric line to instantly jump to that part of the song.
-- **Lyric Timing Offset**: Fine-tune sync delay (+/- ms) if lyrics are slightly ahead or behind.
-- **Multilingual Translation**: View automatic translations in over 20+ languages beneath original lyrics.
+### 🎤 Synchronized Karaoke Lyrics
+- **Real-Time Word & Line Sync**: Words highlight synchronously as the artist sings.
+- **Interactive Lyric Seeking**: Tap any lyric line to instantly jump to that part of the song.
+- **Multilingual Translations**: Automatically translate lyrics across 20+ languages.
+- **Timing Offset Adjustment**: Fine-tune delay (+/- ms) to align lyrics to any audio stream.
 
 ### 💾 Offline Downloads & Storage Manager
-- **One-Click Offline Downloads**: Download individual tracks, entire albums, or custom playlists to listen without an internet connection.
-- **Configurable Storage Ceiling**: Set maximum disk usage caps (e.g. 2 GB, 8 GB, etc.) with automatic smart cache management.
-
-### 📊 Last.fm & Discord Rich Presence
-- **Discord Rich Presence**: Show friends what you're listening to in real-time on Discord, complete with album art and track progress.
-- **Last.fm Scrobbling**: Automatically scrobble tracks to your Last.fm profile with toggleable settings.
-
-### 🔍 Powerful Search & Discovery
-- **Instant Search**: Search through millions of songs, albums, artists, and community playlists.
-- **Curated Moods & Genres**: Explore charts, new releases, chill, workout, party, and focus categories.
-- **Quick Keyboard Shortcuts**: Access search instantly with `Ctrl + Space` from anywhere in the app.
-
-### 🎨 Sleek Modern UI & Customization
-- **Theme Support**: Sleek obsidian dark mode and clean light theme that match your system preferences.
-- **Mini Player**: Detachable floating compact player window with hover expand controls.
-- **Local Files & Tagging**: Play music stored on your local disk alongside streaming tracks.
+- **1-Click Offline Downloads**: Download individual tracks, entire albums, or custom playlists.
+- **Native Offline Playback**: Listen on airplanes, subways, or anywhere without an internet connection.
+- **Storage Limits**: Set cache limits and manage device storage directly from settings.
 
 ---
 
 ## 📥 Downloads & Installation
 
-Pre-built binaries and packages are available on the **[Releases Page](https://github.com/jupiterbania/Neno-Music-App/releases/latest)**.
+Official binaries and APKs are available on the **[Releases Page (v1.0.1)](https://github.com/eveyka/Neno-Music-App/releases/tag/v1.0.1)**:
 
-### 📱 Android APK
-Download the appropriate APK file for your phone or tablet from the **[Releases Page](https://github.com/jupiterbania/Neno-Music-App/releases/latest)**:
-- **`Neno-Music-arm64.apk`**: Recommended for almost all modern Android phones (64-bit ARM).
-- **`Neno-Music-universal.apk`**: Universal APK compatible with all Android devices.
-- **`Neno-Music-arm32.apk`**: For older 32-bit ARM Android devices.
+| Platform | Download Package | Details |
+|---|---|---|
+| **Android (ARM64)** | [Neon-Music-v1.0.1-arm64-v8a.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.1/Neon-Music-v1.0.1-arm64-v8a.apk) | **Recommended** for modern phones (~11.3 MB) |
+| **Android (Universal)** | [Neon-Music-v1.0.1-universal.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.1/Neon-Music-v1.0.1-universal.apk) | Compatible with all Android architectures (~35 MB) |
+| **Android (ARM32)** | [Neon-Music-v1.0.1-armeabi-v7a.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.1/Neon-Music-v1.0.1-armeabi-v7a.apk) | For legacy 32-bit Android devices (~10 MB) |
+| **iOS (iPhone / iPad)** | [Neno-Music-v1.0.1-iOS.ipa](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.1/Neno-Music-v1.0.1-iOS.ipa) | Sideload via AltStore, Sideloadly, TrollStore |
+| **Windows / macOS / Linux** | [Desktop Releases](https://github.com/eveyka/Neno-Music-App/releases/tag/v1.0.1) | Direct MSI, DMG, AppImage, and DEB builds |
 
-> **Installation Note**: Enable "Install unknown apps" in your Android settings for your browser or file manager when installing the APK for the first time.
-
-### 🍏 iOS (iPhone & iPad)
-Download the direct `.ipa` package from the **[Releases Page](https://github.com/jupiterbania/Neno-Music-App/releases/latest)**:
-- **`Neno-Music.ipa`**: Direct standalone iOS application package. Ready to install/sideload directly onto your iPhone or iPad using **AltStore**, **Sideloadly**, **Scarlet**, or **TrollStore** (no unzipping required).
-
-### 💻 Desktop (Windows, macOS, Linux)
-- **Windows**: Download the `.msi` installer or standalone `.exe` setup from releases.
-- **Linux**: Available in `.deb`, `.rpm`, `.AppImage`, and Arch Linux AUR (`yay -S neno`).
-- **macOS**: Download the `.dmg` package from releases.
+> **Android Installation Note**: If installing an APK directly, ensure "Install unknown apps" permission is enabled for your browser or file manager.
 
 ---
 
-## 🛠️ Tech Stack & Architecture
+## 🛠️ Architecture & Tech Stack
 
-| Layer | Technologies Used |
-|---|---|
-| **Core Shell** | [Tauri 2](https://v2.tauri.app/) · Rust 2021 |
-| **Audio Processing** | Rodio · Symphonia (Opus / Matroska / Ogg) · AAudio (Android) |
-| **Frontend Framework** | React 19 · TypeScript · Vite 7 |
-| **Styling & Motion** | Tailwind CSS · Framer Motion · Solar Icons |
-| **Media Bridge** | Android MediaSessionCompat · WebKit Bridge · Linux MPRIS / D-Bus |
+```
+┌────────────────────────────────────────────────────────┐
+│                   Neon Music Architecture              │
+├──────────────────────────┬─────────────────────────────┤
+│ Frontend (UI / React 19) │ Vite 7 · TypeScript · Tailwind CSS │
+│ Core Desktop & Mobile    │ Tauri 2 · Rust 2021         │
+│ Audio Pipeline           │ Rodio · Symphonia (Opus/AAC)│
+│ Android Integration      │ MediaSessionCompat · AAudio │
+│ Network & Data Source    │ YouTube Music InnerTube API │
+└──────────────────────────┴─────────────────────────────┘
+```
 
 ---
 
@@ -152,11 +170,11 @@ Download the direct `.ipa` package from the **[Releases Page](https://github.com
 ### Prerequisites
 - [Node.js](https://nodejs.org/) (v18 or newer)
 - [Rust](https://rustup.rs/) (stable channel)
-- For Android builds: Android SDK, NDK (27+), and Java 17+
+- For Android: Android SDK, NDK (27+), and Java 17+
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/jupiterbania/Neno-Music-App.git
+git clone https://github.com/eveyka/Neno-Music-App.git
 cd Neno-Music-App
 ```
 
@@ -167,44 +185,38 @@ npm install
 
 ### 3. Run development mode
 ```bash
+# Frontend dev server:
 npm run dev
+
 # Or with Tauri desktop window:
 npm run tauri dev
 ```
 
 ### 4. Build release packages
 ```bash
-# Build desktop release
+# Build desktop packages:
 npm run tauri build
 
-# Build split Android APKs
-npx tauri android build --apk --split-per-abi
+# Build Android APKs:
+npx tauri android build --apk
 ```
 
 ---
 
 ## 🛡️ License
 
-This project is licensed under the **Apache License, Version 2.0**. See the [LICENSE](LICENSE) file for complete terms.
+This project is licensed under the **Apache License, Version 2.0**. See the [LICENSE](LICENSE) file for complete details.
 
 ```
-Copyright 2026 Neno Music App Contributors
+Copyright 2026 Neon Music Contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
     http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
 ```
 
----
-
 <p align="center">
-  Made with ❤️ for music lovers everywhere.
+  <b>Neon Music</b> — Built with ❤️ for music enthusiasts worldwide.
 </p>
