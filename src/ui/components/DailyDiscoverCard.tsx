@@ -42,20 +42,11 @@ export const DailyDiscoverCard = memo(function DailyDiscoverCard({
       }}
       className={cn(
         "group/discover relative w-[84vw] max-w-[340px] aspect-[4/5] min-h-[340px] shrink-0 snap-center",
-        "rounded-3xl overflow-hidden bg-neutral-900/60 backdrop-blur-2xl border border-white/20",
-        "shadow-[0_20px_50px_rgba(0,0,0,0.7),inset_0_1px_0_0_rgba(255,255,255,0.25)]",
+        "rounded-3xl overflow-hidden bg-neutral-900 border border-white/10 shadow-2xl",
         "select-none cursor-pointer transition-transform duration-300 active:scale-98",
         className,
       )}
     >
-      {/* Dynamic Ambient Diffused Glow for Glass Refraction */}
-      {track.artworkUrl && (
-        <div
-          className="absolute -inset-4 bg-cover bg-center blur-2xl opacity-45 scale-110 pointer-events-none"
-          style={{ backgroundImage: `url("${track.artworkUrl}")` }}
-        />
-      )}
-
       {/* Background artwork */}
       <TrackArtwork
         artworkUrl={track.artworkUrl}
@@ -64,35 +55,31 @@ export const DailyDiscoverCard = memo(function DailyDiscoverCard({
         className="absolute inset-0 size-full object-cover transition-transform duration-700 ease-out group-hover/discover:scale-105"
       />
 
-      {/* Frosted glass scrim & specular shine */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/15 backdrop-blur-[2px]" />
-      <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-white/15 via-white/[0.03] to-transparent pointer-events-none" />
+      {/* Dark gradient scrims */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-black/20" />
 
       {/* Card Content Overlay */}
-      <div className="relative size-full p-4 sm:p-5 flex flex-col justify-between">
-        {/* Top: Frosted glass title capsule */}
-        <div className="flex flex-col gap-1 rounded-2xl bg-black/40 backdrop-blur-xl border border-white/15 p-3.5 shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
-          <h3 className="text-lg sm:text-xl font-black tracking-tight text-white line-clamp-2 leading-tight drop-shadow-sm">
+      <div className="relative size-full p-5 sm:p-6 flex flex-col justify-between">
+        {/* Top: Track title & artist */}
+        <div className="flex flex-col gap-1 drop-shadow-md">
+          <h3 className="text-xl sm:text-2xl font-black tracking-tight text-white line-clamp-2 leading-tight">
             {track.title}
           </h3>
-          <p className="text-xs text-white/80 font-medium truncate mt-0.5">
+          <p className="text-xs sm:text-sm text-white/80 font-medium truncate mt-0.5">
             {subtitle}
           </p>
         </div>
 
-        {/* Center / Float Glass Play Button */}
-        <div className="self-center my-auto size-15 rounded-full bg-white/90 backdrop-blur-xl text-black flex items-center justify-center shadow-[0_12px_32px_rgba(0,0,0,0.6),0_0_24px_rgba(255,255,255,0.3)] border border-white/50 scale-95 group-hover/discover:scale-110 active:scale-90 transition-all duration-200">
-          <PlayActiveIcon size={26} className="translate-x-0.5 fill-black text-black" />
+        {/* Center / Float Play Button */}
+        <div className="self-center my-auto size-14 rounded-full bg-white text-black flex items-center justify-center shadow-2xl scale-95 group-hover/discover:scale-110 active:scale-90 transition-all duration-200">
+          <PlayActiveIcon size={24} className="translate-x-0.5 fill-black text-black" />
         </div>
 
-        {/* Bottom: Recommendation tag in frosted glass pill */}
-        <div className="flex items-center">
-          <div className="rounded-full bg-black/45 backdrop-blur-xl border border-white/15 px-3.5 py-1.5 shadow-md flex items-center gap-1.5 max-w-full">
-            <span className="size-1.5 rounded-full bg-primary shrink-0 animate-pulse" />
-            <p className="text-[11px] italic text-white/95 font-medium drop-shadow-sm truncate">
-              {recommendationTag}
-            </p>
-          </div>
+        {/* Bottom: Recommendation tag badge */}
+        <div className="pt-2 border-t border-white/10">
+          <p className="text-xs italic text-white/90 font-medium drop-shadow-sm truncate">
+            {recommendationTag}
+          </p>
         </div>
       </div>
     </div>
