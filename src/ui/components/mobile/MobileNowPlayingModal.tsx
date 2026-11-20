@@ -515,6 +515,7 @@ export function MobileNowPlayingModal({
   } | null>(null);
   const skipAnimationTimeoutRef = useRef<number | null>(null);
   const lastArtworkTapRef = useRef<{ time: number; side: "left" | "right" } | null>(null);
+  const lastArtworkTouchTimeRef = useRef(0);
 
   const getSheetPxForState = useCallback((state: QueueSheetState) => {
     if (typeof window === "undefined") return 0;
@@ -841,23 +842,20 @@ export function MobileNowPlayingModal({
     }, 3500);
   };
 
-  // Double-tap or double-click on artwork to skip 5 seconds forward / rewind
-  const handleArtworkClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
+  // Trigger double-tap 5s skip on artwork (left = -5s, right = +5s). Single tap does NOTHING.
+  const triggerDoubleTap = useCallback(
+    (side: "left" | "right") => {
       if (!currentTrack) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const isRight = clickX > rect.width / 2;
-      const side: "left" | "right" = isRight ? "right" : "left";
       const now = Date.now();
+      const lastTap = lastArtworkTapRef.current;
 
       if (
-        lastArtworkTapRef.current &&
-        lastArtworkTapRef.current.side === side &&
-        now - lastArtworkTapRef.current.time < 380
+        lastTap &&
+        lastTap.side === side &&
+        now - lastTap.time < 420
       ) {
         lastArtworkTapRef.current = null;
-        const delta = isRight ? 5 : -5;
+        const delta = side === "right" ? 5 : -5;
         const current = playerController.getCurrentTime();
         const duration = currentTrack.durationSec || Infinity;
         const target = Math.max(0, Math.min(current + delta, duration));
@@ -879,10 +877,52 @@ export function MobileNowPlayingModal({
           }
         }
       } else {
+        // First tap / single click: record tap timestamp. DO NOTHING ELSE (no sheet opening).
         lastArtworkTapRef.current = { time: now, side };
       }
     },
-    [currentTrack],
+    [currentTrack, playerController],
+  );
+
+  const handleArtworkTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    // Isolate poster touches completely so swiping or clicking poster never triggers parent body drag or sheet
+    e.stopPropagation();
+  }, []);
+
+  const handleArtworkTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+  }, []);
+
+  const handleArtworkTouchEnd = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      e.stopPropagation();
+      lastArtworkTouchTimeRef.current = Date.now();
+      if (e.changedTouches.length === 0) return;
+      const touch = e.changedTouches[0];
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = touch.clientX - rect.left;
+      const isRight = clickX > rect.width / 2;
+      const side: "left" | "right" = isRight ? "right" : "left";
+      triggerDoubleTap(side);
+    },
+    [triggerDoubleTap],
+  );
+
+  // Mouse fallback for double-click on desktop
+  const handleArtworkClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      e.stopPropagation();
+      // If a touch was just handled, ignore synthesized mouse click
+      if (Date.now() - lastArtworkTouchTimeRef.current < 500) {
+        return;
+      }
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const isRight = clickX > rect.width / 2;
+      const side: "left" | "right" = isRight ? "right" : "left";
+      triggerDoubleTap(side);
+    },
+    [triggerDoubleTap],
   );
 
   // Handle touch events on the drag handle / sheet header with real-time tracking
@@ -1294,6 +1334,9 @@ export function MobileNowPlayingModal({
                   <div className="flex flex-1 items-center justify-center px-6 py-2 min-h-0">
                     <div
                       onClick={handleArtworkClick}
+                      onTouchStart={handleArtworkTouchStart}
+                      onTouchMove={handleArtworkTouchMove}
+                      onTouchEnd={handleArtworkTouchEnd}
                       className={cn(
                         "relative overflow-hidden rounded-2xl shadow-[0_16px_44px_rgba(0,0,0,0.85)] select-none border border-white/5 cursor-pointer",
                         queueSheetState === "half"
