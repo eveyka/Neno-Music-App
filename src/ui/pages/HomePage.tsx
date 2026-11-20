@@ -762,7 +762,7 @@ export function HomePage({
 
   const madeForYouSection = (
     <section
-      className={`flex flex-col gap-3 overflow-y-visible ${
+      className={`flex flex-col gap-2.5 overflow-y-visible ${
         isLoadingSuggestions ? "opacity-60" : "opacity-100 transition-opacity"
       }`}
     >
@@ -783,7 +783,7 @@ export function HomePage({
       </div>
 
       {isMobile ? (
-        <div className="flex w-full gap-2.5 sm:gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-px-4 py-1 px-1 [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain">
+        <div className="flex w-full gap-2.5 sm:gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-px-4 py-0.5 px-0.5 [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain">
           {isLoadingSuggestions ? (
             Array.from({ length: 5 }, (_, index) => (
               <div key={index} className="w-32 sm:w-36 shrink-0 aspect-[3/4] snap-center">
@@ -858,7 +858,7 @@ export function HomePage({
   );
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-7 pb-8">
+    <div className="flex flex-col gap-4 sm:gap-6 pb-8">
       {isMobile && onOpenSearch && (
         <MobileHeader
           onOpenSearch={onOpenSearch}
@@ -870,7 +870,7 @@ export function HomePage({
       )}
 
       {/* ── Mood Chips Header (Matches YouTube Music) ───────────────────── */}
-      <div className="flex flex-col gap-3 pt-0.5">
+      <div className="flex flex-col gap-2 -mt-2.5 sm:mt-0">
         {!isMobile && (
           <div className="flex items-center justify-between">
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white drop-shadow-xs">
@@ -883,7 +883,7 @@ export function HomePage({
         )}
 
         {/* YouTube Music Style Filter Pills */}
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar snap-x snap-proximity scroll-px-4 [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex gap-2 overflow-x-auto pb-0.5 no-scrollbar snap-x snap-proximity scroll-px-4 [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {(() => {
             // If YouTube Music provided dynamic chips in the home feed, use them!
             const dynamicChips = persistentHomeFeed?.headerChips ?? ytmHomeFeed?.headerChips;
@@ -950,7 +950,7 @@ export function HomePage({
       {/* ── 1. Topmost: Daily Discover Songs (Direct songs, NO title) ─────── */}
       <section className="w-full">
         {dailyDiscoverTracks.length > 0 ? (
-          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain">
+          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-1 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain">
             {dailyDiscoverTracks.map((track) => (
               <DailyDiscoverCard
                 key={track.id}
@@ -960,7 +960,7 @@ export function HomePage({
             ))}
           </div>
         ) : (isLoadingHomeFeed || isLoadingSuggestions || isWaitingForLibrary) ? (
-          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar overscroll-x-contain">
+          <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-1 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar overscroll-x-contain">
             {Array.from({ length: 3 }).map((_, i) => (
               <div
                 key={i}
@@ -1000,7 +1000,7 @@ export function HomePage({
       {/* ── 5. Trending community Playlist ────────────────────────────────── */}
       {showYtmHomeFeed && libraryState.status === "ready" && (
         trendingCommunityShelf ? (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2.5">
             <BrowseShelves
               shelves={[trendingCommunityShelf]}
               playerController={playerController}
@@ -1011,7 +1011,7 @@ export function HomePage({
             />
           </div>
         ) : isLoadingHomeFeed ? (
-          <section className="flex flex-col gap-3">
+          <section className="flex flex-col gap-2.5">
             <div className="h-6 w-48 rounded-lg bg-white/10 animate-pulse" />
             <AlbumGridSkeleton count={isMobile ? 3 : 6} label="Loading trending community playlists" />
           </section>
@@ -1019,7 +1019,7 @@ export function HomePage({
       )}
 
       {compactRecent.length === 0 && isWaitingForLibrary && (
-        <section className="flex flex-col gap-3">
+        <section className="flex flex-col gap-2.5">
           <h2 className="text-xl font-bold tracking-tight text-foreground">Recently played</h2>
           <div
             className="grid grid-cols-2 gap-2 sm:gap-2.5 sm:[grid-template-columns:repeat(auto-fill,minmax(14.5rem,1fr))]"
@@ -1052,7 +1052,7 @@ export function HomePage({
       )}
 
       {compactRecent.length > 0 && (
-        <section className="flex flex-col gap-3">
+        <section className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold tracking-tight text-foreground">Recently played</h2>
             {isMobile && (
@@ -1106,7 +1106,7 @@ export function HomePage({
       {/* ── 7. Remaining Shelves (Artists, Recommended Albums, Featured Playlists, Hits) ── */}
       {showYtmHomeFeed && libraryState.status === "ready" && (
         remainingOtherShelves.length > 0 ? (
-          <div className="flex flex-col gap-8">
+          <div className="flex flex-col gap-5 sm:gap-6">
             <BrowseShelves
               shelves={remainingOtherShelves}
               playerController={playerController}
@@ -1117,7 +1117,7 @@ export function HomePage({
             />
           </div>
         ) : isLoadingHomeFeed ? (
-          <section className="flex flex-col gap-3">
+          <section className="flex flex-col gap-2.5">
             <div className="h-6 w-52 rounded-lg bg-white/10 animate-pulse" />
             <AlbumGridSkeleton count={isMobile ? 4 : 8} label="Loading recommendations" />
           </section>

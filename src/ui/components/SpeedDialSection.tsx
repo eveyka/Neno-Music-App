@@ -103,7 +103,7 @@ export const SpeedDialSection = memo(function SpeedDialSection({
   }
 
   return (
-    <section className={cn("flex flex-col gap-3.5 select-none", className)}>
+    <section className={cn("flex flex-col gap-2.5 select-none", className)}>
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <button

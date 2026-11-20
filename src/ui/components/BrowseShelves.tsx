@@ -178,7 +178,7 @@ export const BrowseShelves = memo(function BrowseShelves({
   };
 
   return (
-    <div className={cn("flex flex-col gap-8", className)}>
+    <div className={cn("flex flex-col gap-5 sm:gap-6", className)}>
       {shelves.map((shelf, shelfIndex) => {
         const shelfTitle = shelf.title?.trim() || (
           shelf.albums.length > 0 ? "Recommended Albums" :
@@ -209,14 +209,14 @@ export const BrowseShelves = memo(function BrowseShelves({
         // ── 1. COMMUNITY PLAYLISTS SHELF (Screenshot 1) ─────────────────
         if (isCommunity) {
           return (
-            <section key={`${shelfTitle}:${shelfIndex}`} className="flex flex-col gap-3.5">
+            <section key={`${shelfTitle}:${shelfIndex}`} className="flex flex-col gap-2.5 sm:gap-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
                   {shelfTitle}
                 </h2>
               </div>
 
-              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain">
+              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-1 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain">
                 {shelf.playlists.map((playlist) => (
                   <CommunityPlaylistCard
                     key={playlist.id}
@@ -234,7 +234,7 @@ export const BrowseShelves = memo(function BrowseShelves({
         // ── 2. YOUR DAILY DISCOVER SHELF (Screenshot 3) ──────────────────
         if (isDailyDiscover) {
           return (
-            <section key={`${shelfTitle}:${shelfIndex}`} className="flex flex-col gap-3.5">
+            <section key={`${shelfTitle}:${shelfIndex}`} className="flex flex-col gap-2.5 sm:gap-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
                   {shelfTitle}
@@ -250,7 +250,7 @@ export const BrowseShelves = memo(function BrowseShelves({
                 )}
               </div>
 
-              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain">
+              <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-1 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain">
                 {shelf.tracks.map((track) => (
                   <DailyDiscoverCard
                     key={track.id}
@@ -264,7 +264,7 @@ export const BrowseShelves = memo(function BrowseShelves({
         }
 
         return (
-          <section key={`${shelfTitle}:${shelfIndex}`} className="flex flex-col gap-3.5">
+          <section key={`${shelfTitle}:${shelfIndex}`} className="flex flex-col gap-2.5 sm:gap-3">
             {/* ── Shelf Header ─────────────────────────────────────────── */}
             <div className="flex items-center justify-between">
               {isArtistSpotlight && shelf.primaryArtist ? (
@@ -313,7 +313,7 @@ export const BrowseShelves = memo(function BrowseShelves({
 
             {/* ── Tracks row (Quick picks / Songs) ──────────────────────── */}
             {hasTracks && (
-              <div className="flex gap-2.5 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain">
+              <div className="flex gap-2.5 sm:gap-4 overflow-x-auto pb-1 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] overscroll-x-contain">
                 {chunkArray(shelf.tracks, 4).map((chunk, colIndex) => (
                   <div
                     key={`col-${colIndex}`}

@@ -82,7 +82,7 @@ export function HomeDestinations({
   ];
 
   return (
-    <section className="flex flex-col gap-3" aria-label="Quick Destinations">
+    <section className="flex flex-col gap-2" aria-label="Quick Destinations">
       <div className="grid grid-cols-2 gap-2 sm:gap-2.5 sm:[grid-template-columns:repeat(auto-fit,minmax(12rem,1fr))]">
         {cards.map((card) => (
           <motion.button
