@@ -1415,7 +1415,7 @@ export function SettingsPage({
                           }}
                         >
                           <span className="font-bold">✓</span>
-                          <span>Install</span>
+                          <span>Install Now</span>
                         </button>
                         <button
                           className="flex items-center gap-1.5 rounded-full bg-card border border-border/50 hover:bg-muted px-3.5 py-1.5 text-xs font-medium text-foreground transition-all active:scale-95 focus-visible:outline-none"
@@ -1424,7 +1424,7 @@ export function SettingsPage({
                           onClick={() => void handleInstallUpdate()}
                         >
                           <RefreshIcon size={13} className={updateStatus === "installing" ? "animate-spin" : undefined} />
-                          <span>Reinstall</span>
+                          <span>Re-download</span>
                         </button>
                       </>
                     ) : updateResult.canInstall ? (

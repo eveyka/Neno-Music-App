@@ -21,7 +21,7 @@ import {
 } from "../../internal/updateChecker";
 import { cn } from "@/lib/utils";
 
-const AUTO_DISMISS_MS = 90_000;
+const AUTO_DISMISS_MS = 120_000;
 
 interface UpdateToastProps {
   update: UpdateInfo;
@@ -64,14 +64,14 @@ export function UpdateToast({ update, onDismiss }: UpdateToastProps) {
       await installUpdate(update, (p) => {
         setProgress(p);
       });
-      // Download completed and installer triggered
+      // Download completed and APK verified
       setStage("downloaded");
     } catch (err) {
       console.error("[UpdateToast] update failed:", err);
       setError(
         err instanceof Error
           ? err.message
-          : "Download failed. Please check connection and try again.",
+          : "Download failed. Please check your internet connection and try again.",
       );
       setStage("error");
     }
@@ -86,12 +86,9 @@ export function UpdateToast({ update, onDismiss }: UpdateToastProps) {
     }
   };
 
-  const handleReinstall = () => {
-    // Re-trigger the installer intent, or re-download fresh
-    const triggered = installDownloadedApkDirectly(update.version);
-    if (!triggered) {
-      void handleStartDownload(true);
-    }
+  const handleRedownload = () => {
+    // Re-download fresh copy from server
+    void handleStartDownload(true);
   };
 
   const formatBytes = (bytes?: number) => {
@@ -109,9 +106,9 @@ export function UpdateToast({ update, onDismiss }: UpdateToastProps) {
         transition={{ type: "spring", stiffness: 420, damping: 32 }}
         className={cn(
           "fixed bottom-24 sm:bottom-28 inset-x-3 sm:inset-x-auto sm:right-6 z-50",
-          "w-auto sm:w-[420px] max-w-[calc(100vw-1.5rem)]",
-          "rounded-3xl bg-[#131318]/95 p-4 sm:p-5 text-foreground backdrop-blur-2xl",
-          "border border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.85),0_0_35px_rgba(255,0,51,0.2)]",
+          "w-auto sm:w-[440px] max-w-[calc(100vw-1.5rem)]",
+          "rounded-3xl bg-[#121216]/95 p-4 sm:p-5 text-foreground backdrop-blur-2xl",
+          "border border-white/15 shadow-[0_24px_60px_rgba(0,0,0,0.9),0_0_35px_rgba(255,0,51,0.18)]",
           "flex flex-col gap-3.5 select-none",
         )}
         role="status"
@@ -119,12 +116,21 @@ export function UpdateToast({ update, onDismiss }: UpdateToastProps) {
       >
         {/* Header: Title, glowing version pill, and close button */}
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex size-9 items-center justify-center rounded-2xl bg-primary/20 text-primary shrink-0 shadow-inner">
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              className={cn(
+                "flex size-10 items-center justify-center rounded-2xl shrink-0 shadow-inner border transition-colors",
+                stage === "downloaded"
+                  ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
+                  : stage === "downloading"
+                  ? "bg-primary/20 border-primary/30 text-primary"
+                  : "bg-primary/20 border-primary/30 text-primary",
+              )}
+            >
               {stage === "downloaded" ? (
-                <CheckIcon size={20} className="text-emerald-400" />
+                <CheckIcon size={22} className="text-emerald-400" />
               ) : stage === "downloading" ? (
-                <Loader variant="spinner" size={18} />
+                <Loader variant="spinner" size={20} />
               ) : (
                 <DownloadIcon size={20} />
               )}
@@ -133,17 +139,19 @@ export function UpdateToast({ update, onDismiss }: UpdateToastProps) {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold tracking-tight text-white truncate">
                   {stage === "downloaded"
-                    ? "Update Ready"
+                    ? "Update Downloaded"
                     : stage === "downloading"
-                      ? "Downloading Update"
-                      : "New Version Available"}
+                    ? "Downloading Update"
+                    : "New Update Available"}
                 </span>
-                <span className="rounded-full bg-primary/20 border border-primary/30 px-2 py-0.5 text-[10px] font-bold text-primary tabular-nums">
+                <span className="rounded-full bg-primary/20 border border-primary/30 px-2 py-0.5 text-[10px] font-extrabold text-primary tabular-nums tracking-wide">
                   v{update.version}
                 </span>
               </div>
-              <span className="text-xs text-white/60 truncate">
-                {update.installedVersion ? `Current: v${update.installedVersion} → New: v${update.version}` : `v${update.version}`}
+              <span className="text-xs text-white/60 truncate mt-0.5">
+                {update.installedVersion
+                  ? `Current: v${update.installedVersion}  →  Latest: v${update.version}`
+                  : `Neon Music v${update.version}`}
               </span>
             </div>
           </div>
@@ -160,28 +168,44 @@ export function UpdateToast({ update, onDismiss }: UpdateToastProps) {
           </button>
         </div>
 
+        {/* Informative Text Body depending on stage */}
+        {stage === "available" && (
+          <p className="text-xs text-white/75 leading-relaxed">
+            A new version of Neon Music is available. Download now to get the latest features, faster performance, and bug fixes.
+          </p>
+        )}
+
+        {stage === "downloaded" && (
+          <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs text-emerald-300">
+            <CheckIcon size={16} className="shrink-0 text-emerald-400" />
+            <span className="leading-snug">
+              Update package ready. You can install it now or re-download a fresh copy if needed.
+            </span>
+          </div>
+        )}
+
         {/* Progress Bar (Visible while downloading) */}
         {stage === "downloading" && (
-          <div className="flex flex-col gap-1.5 pt-1">
-            <div className="flex items-center justify-between text-xs text-white/70">
-              <span>
+          <div className="flex flex-col gap-2 pt-1">
+            <div className="flex items-center justify-between text-xs text-white/80">
+              <span className="font-medium">
                 {progress?.percent !== undefined
                   ? `Downloading update (${progress.percent}%)`
                   : "Connecting to server..."}
               </span>
               {progress?.downloadedBytes ? (
-                <span className="tabular-nums">
+                <span className="tabular-nums font-semibold text-white/90">
                   {formatBytes(progress.downloadedBytes)}
                   {progress.totalBytes ? ` / ${formatBytes(progress.totalBytes)}` : ""}
                 </span>
               ) : null}
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10 p-0.5 border border-white/5">
               <motion.div
-                className="h-full rounded-full bg-primary"
+                className="h-full rounded-full bg-gradient-to-r from-primary via-primary/90 to-primary shadow-[0_0_12px_rgba(255,0,51,0.6)]"
                 initial={false}
                 animate={{
-                  width: `${progress?.percent !== undefined ? Math.max(3, progress.percent) : 25}%`,
+                  width: `${progress?.percent !== undefined ? Math.max(4, progress.percent) : 25}%`,
                 }}
                 transition={{ type: "spring", stiffness: 350, damping: 30 }}
               />
@@ -191,7 +215,7 @@ export function UpdateToast({ update, onDismiss }: UpdateToastProps) {
 
         {/* Error message */}
         {stage === "error" && error && (
-          <div className="rounded-xl bg-destructive/15 border border-destructive/30 px-3 py-2 text-xs text-destructive">
+          <div className="rounded-xl bg-destructive/15 border border-destructive/30 px-3 py-2 text-xs text-destructive leading-snug">
             {error}
           </div>
         )}
@@ -221,55 +245,64 @@ export function UpdateToast({ update, onDismiss }: UpdateToastProps) {
                 <button
                   type="button"
                   onClick={() => void handleStartDownload(false)}
-                  className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary/90 active:scale-95 transition-all"
+                  className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-md hover:bg-primary/90 active:scale-95 transition-all"
                 >
                   <DownloadIcon size={14} />
-                  <span>Download</span>
+                  <span>Download Update</span>
                 </button>
               </>
             )}
 
             {/* Stage: DOWNLOADING */}
             {stage === "downloading" && (
-              <div className="flex items-center gap-2 text-xs font-medium text-white/60 px-2 py-1">
+              <div className="flex items-center gap-2 text-xs font-semibold text-white/60 px-2 py-1">
                 <Loader variant="spinner" size={14} />
                 <span>Downloading...</span>
               </div>
             )}
 
-            {/* Stage: DOWNLOADED -> Show Install & Reinstall Buttons */}
+            {/* Stage: DOWNLOADED -> Show Install Now & Re-download Buttons */}
             {stage === "downloaded" && (
               <>
                 <button
                   type="button"
-                  onClick={handleReinstall}
-                  className="flex items-center gap-1.5 rounded-xl bg-card border border-white/15 px-3 py-1.5 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all active:scale-95"
-                  title="Re-open installer or re-download the APK"
+                  onClick={handleRedownload}
+                  className="flex items-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 px-3 py-2 text-xs font-semibold text-white transition-all active:scale-95"
+                  title="Download a fresh copy of the update package"
                 >
                   <RefreshIcon size={13} />
-                  <span>Reinstall</span>
+                  <span>Re-download</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleInstallNow}
-                  className="flex items-center gap-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-md transition-all active:scale-95"
+                  className="flex items-center gap-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-950/40 transition-all active:scale-95"
                 >
-                  <CheckIcon size={14} />
-                  <span>Install</span>
+                  <CheckIcon size={15} />
+                  <span>Install Now</span>
                 </button>
               </>
             )}
 
             {/* Stage: ERROR -> Retry button */}
             {stage === "error" && (
-              <button
-                type="button"
-                onClick={() => void handleStartDownload(false)}
-                className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary/90 active:scale-95 transition-all"
-              >
-                <RefreshIcon size={14} />
-                <span>Retry</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={dismiss}
+                  className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleStartDownload(false)}
+                  className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary/90 active:scale-95 transition-all"
+                >
+                  <RefreshIcon size={14} />
+                  <span>Retry Download</span>
+                </button>
+              </>
             )}
           </div>
         </div>
