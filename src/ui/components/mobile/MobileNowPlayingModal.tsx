@@ -235,17 +235,20 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
     <div
       data-queue-index={absoluteIndex}
       className={cn(
-        "relative overflow-hidden rounded-xl my-1 select-none touch-pan-y",
-        isDragged && "opacity-40 scale-[0.98]",
-        dropEdge === "after" && "border-b-2 border-primary",
-        dropEdge === "before" && "border-t-2 border-primary",
+        "relative rounded-2xl my-1.5 select-none touch-pan-y transition-colors duration-150",
+        isDragged && "z-40",
       )}
     >
+      {/* Ghost dashed placeholder behind elevated dragged card */}
+      {isDragged && (
+        <div className="absolute inset-0 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/[0.04] pointer-events-none" />
+      )}
+
       {/* 1. Left Action (Swipe Right): Instant Play */}
       <div
         ref={leftActionRef}
         style={{ opacity: 0 }}
-        className="absolute inset-y-0 left-0 w-full flex items-center gap-2 pl-4 rounded-xl pointer-events-none bg-gradient-to-r from-emerald-600/90 via-emerald-500/80 to-transparent text-white font-semibold text-xs"
+        className="absolute inset-y-0 left-0 w-full flex items-center gap-2 pl-4 rounded-2xl pointer-events-none bg-gradient-to-r from-emerald-600/90 via-emerald-500/80 to-transparent text-white font-semibold text-xs"
       >
         <div className="flex size-7 items-center justify-center rounded-full bg-white text-emerald-700 shadow-md">
           <PlayActiveIcon size={16} className="translate-x-0.5" />
@@ -257,7 +260,7 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
       <div
         ref={rightActionRef}
         style={{ opacity: 0 }}
-        className="absolute inset-y-0 right-0 w-full flex items-center justify-end gap-2 pr-4 rounded-xl pointer-events-none bg-gradient-to-l from-rose-600/90 via-rose-500/80 to-transparent text-white font-semibold text-xs"
+        className="absolute inset-y-0 right-0 w-full flex items-center justify-end gap-2 pr-4 rounded-2xl pointer-events-none bg-gradient-to-l from-rose-600/90 via-rose-500/80 to-transparent text-white font-semibold text-xs"
       >
         <span className="text-sm font-bold tracking-wide drop-shadow-sm">Remove</span>
         <div className="flex size-7 items-center justify-center rounded-full bg-white text-rose-700 shadow-md">
@@ -273,7 +276,12 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
         onClick={() => onPlay(absoluteIndex)}
-        className="relative z-10 flex items-center justify-between gap-3 py-2.5 px-3 rounded-2xl bg-[#171717] hover:bg-[#1f1f1f] active:bg-[#252525] border border-white/10 shadow-xs cursor-pointer transition-colors"
+        className={cn(
+          "relative z-10 flex items-center justify-between gap-3 py-2.5 px-3 rounded-2xl border transition-all duration-150 cursor-pointer",
+          isDragged
+            ? "bg-[#252528] border-primary/70 shadow-[0_20px_48px_rgba(0,0,0,0.95),0_0_28px_rgba(239,68,68,0.3)] ring-2 ring-primary/50"
+            : "bg-[#161618] hover:bg-[#1e1e22] active:bg-[#252528] border-white/10 shadow-xs",
+        )}
       >
         <div className="size-11 shrink-0 overflow-hidden rounded-xl shadow-sm border border-white/10 bg-black/40">
           <TrackArtwork
@@ -284,7 +292,12 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col justify-center">
-          <span className="truncate text-[13px] font-semibold text-white leading-tight">
+          <span
+            className={cn(
+              "truncate text-[13px] font-semibold leading-tight",
+              isDragged ? "text-primary font-bold" : "text-white",
+            )}
+          >
             {track.title}
           </span>
           <span className="truncate text-[11px] font-medium text-white/60 leading-tight mt-0.5">
@@ -293,19 +306,40 @@ const SwipeableQueueRow = memo(function SwipeableQueueRow({
           </span>
         </div>
 
+        {/* Drag Handle with active indicator */}
         <div
           onPointerDown={(e) => onDragStart(e, absoluteIndex)}
           onPointerMove={onDragMove}
           onPointerUp={onDragEnd}
           onPointerCancel={onDragEnd}
           onClick={(e) => e.stopPropagation()}
-          className="flex size-10 shrink-0 items-center justify-center text-white/40 hover:text-white active:text-white cursor-grab active:cursor-grabbing touch-none rounded-lg"
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded-xl touch-none transition-all active:scale-90",
+            isDragged
+              ? "text-primary bg-primary/20 shadow-sm scale-110"
+              : "text-white/40 hover:text-white/80 active:text-white hover:bg-white/5",
+          )}
           aria-label="Hold and drag to reorder"
           title="Hold and drag to reorder"
         >
           <DragHandleIcon size={20} />
         </div>
       </div>
+
+      {/* DROP INSERTION MARKERS (Top / Bottom Glowing Line with Neon Dot) */}
+      {dropEdge === "before" && (
+        <div className="absolute -top-1.5 inset-x-2 z-30 flex items-center pointer-events-none animate-in fade-in zoom-in-95 duration-100">
+          <div className="size-2.5 rounded-full bg-primary shadow-[0_0_10px_#ef4444] shrink-0" />
+          <div className="h-0.75 flex-1 bg-gradient-to-r from-primary via-rose-500 to-transparent rounded-full shadow-[0_0_12px_#ef4444]" />
+        </div>
+      )}
+
+      {dropEdge === "after" && (
+        <div className="absolute -bottom-1.5 inset-x-2 z-30 flex items-center pointer-events-none animate-in fade-in zoom-in-95 duration-100">
+          <div className="size-2.5 rounded-full bg-primary shadow-[0_0_10px_#ef4444] shrink-0" />
+          <div className="h-0.75 flex-1 bg-gradient-to-r from-primary via-rose-500 to-transparent rounded-full shadow-[0_0_12px_#ef4444]" />
+        </div>
+      )}
     </div>
   );
 });
@@ -1169,6 +1203,8 @@ export function MobileNowPlayingModal({
   } | null>(null);
   const dropTargetRef = useRef<{ index: number; insertAfter: boolean } | null>(null);
   const isDraggingRef = useRef(false);
+  const dragRowElRef = useRef<HTMLElement | null>(null);
+  const queueScrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const handlePlayQueueTrack = useCallback((absoluteIndex: number) => {
     if (!isDraggingRef.current) {
@@ -1188,9 +1224,12 @@ export function MobileNowPlayingModal({
 
   const handleRowDragStart = useCallback((e: React.PointerEvent, absoluteIndex: number) => {
     e.stopPropagation();
-    const target = e.currentTarget as HTMLElement;
+    const handleEl = e.currentTarget as HTMLElement;
+    const rowContainer = handleEl.closest<HTMLElement>("[data-queue-index]");
+    if (!rowContainer) return;
+
     try {
-      target.setPointerCapture(e.pointerId);
+      handleEl.setPointerCapture(e.pointerId);
     } catch {
       // Ignored if pointer capture fails
     }
@@ -1201,6 +1240,7 @@ export function MobileNowPlayingModal({
       startY: e.clientY,
       isDragging: false,
     };
+    dragRowElRef.current = rowContainer;
     dropTargetRef.current = null;
     setDropTarget(null);
   }, []);
@@ -1209,23 +1249,58 @@ export function MobileNowPlayingModal({
     const drag = pointerDragRef.current;
     if (!drag || e.pointerId !== drag.pointerId) return;
 
-    const deltaY = Math.abs(e.clientY - drag.startY);
-    if (!drag.isDragging && deltaY > 4) {
+    const deltaY = e.clientY - drag.startY;
+
+    if (!drag.isDragging && Math.abs(deltaY) > 4) {
       drag.isDragging = true;
       isDraggingRef.current = true;
       setDraggedIndex(drag.sourceIndex);
+
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        try {
+          navigator.vibrate(25);
+        } catch {
+          // Ignore
+        }
+      }
+
+      if (dragRowElRef.current) {
+        dragRowElRef.current.style.transition = "none";
+        dragRowElRef.current.style.zIndex = "50";
+        dragRowElRef.current.style.willChange = "transform";
+      }
     }
 
     if (!drag.isDragging) return;
 
+    // 1. Direct hardware-accelerated transform on the dragged element (Buttery smooth 120 FPS!)
+    if (dragRowElRef.current) {
+      dragRowElRef.current.style.transform = `translate3d(0, ${deltaY}px, 0) scale(1.025)`;
+    }
+
+    // 2. Smooth auto-scroll queue container if dragged near top/bottom
+    if (queueScrollContainerRef.current) {
+      const containerRect = queueScrollContainerRef.current.getBoundingClientRect();
+      const topDist = e.clientY - containerRect.top;
+      const bottomDist = containerRect.bottom - e.clientY;
+      if (topDist < 48 && topDist > -20) {
+        queueScrollContainerRef.current.scrollTop -= 8;
+      } else if (bottomDist < 48 && bottomDist > -20) {
+        queueScrollContainerRef.current.scrollTop += 8;
+      }
+    }
+
+    // 3. Find drop target row
     const elements = document.elementsFromPoint(e.clientX, e.clientY);
     const targetEl = elements
       .map((el) => el.closest<HTMLElement>("[data-queue-index]"))
       .find((el) => Boolean(el) && Number(el?.dataset.queueIndex) !== drag.sourceIndex);
 
     if (!targetEl) {
-      setDropTarget(null);
-      dropTargetRef.current = null;
+      if (dropTargetRef.current !== null) {
+        dropTargetRef.current = null;
+        setDropTarget(null);
+      }
       return;
     }
 
@@ -1234,8 +1309,21 @@ export function MobileNowPlayingModal({
     const insertAfter = e.clientY >= bounds.top + bounds.height / 2;
 
     const newDrop = { index: targetIndex, insertAfter };
-    dropTargetRef.current = newDrop;
-    setDropTarget(newDrop);
+    if (
+      !dropTargetRef.current ||
+      dropTargetRef.current.index !== newDrop.index ||
+      dropTargetRef.current.insertAfter !== newDrop.insertAfter
+    ) {
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        try {
+          navigator.vibrate(10);
+        } catch {
+          // Ignore
+        }
+      }
+      dropTargetRef.current = newDrop;
+      setDropTarget(newDrop);
+    }
   }, []);
 
   const handleRowDragEnd = useCallback((e: React.PointerEvent) => {
@@ -1248,19 +1336,35 @@ export function MobileNowPlayingModal({
       // Ignore
     }
 
+    if (dragRowElRef.current) {
+      dragRowElRef.current.style.transition =
+        "transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1), box-shadow 0.18s ease-out";
+      dragRowElRef.current.style.transform = "";
+      dragRowElRef.current.style.zIndex = "";
+      dragRowElRef.current.style.willChange = "auto";
+    }
+
     const drop = dropTargetRef.current;
     if (drag.isDragging && drop && drop.index !== drag.sourceIndex) {
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        try {
+          navigator.vibrate(20);
+        } catch {
+          // Ignore
+        }
+      }
       playerController.moveQueueTrack(drag.sourceIndex, drop.index, drop.insertAfter);
     }
 
     pointerDragRef.current = null;
+    dragRowElRef.current = null;
     dropTargetRef.current = null;
     setDraggedIndex(null);
     setDropTarget(null);
 
     setTimeout(() => {
       isDraggingRef.current = false;
-    }, 100);
+    }, 60);
   }, []);
 
   return (
@@ -1919,6 +2023,7 @@ export function MobileNowPlayingModal({
             {/* UP NEXT TRACK LIST */}
             {queueSheetState !== "collapsed" && (
               <div
+                ref={queueScrollContainerRef}
                 onTouchStart={handleQueueListTouchStart}
                 onTouchEnd={handleQueueListTouchEnd}
                 className="flex-1 overflow-y-auto overscroll-contain px-3 pb-20 touch-pan-y"
