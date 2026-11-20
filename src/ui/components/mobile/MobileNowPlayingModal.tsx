@@ -1196,20 +1196,20 @@ export function MobileNowPlayingModal({
           transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
           className="fixed inset-0 z-50 flex flex-col bg-[#050505] text-foreground select-none overflow-hidden transform-gpu will-change-transform"
         >
-          {/* Subtle Ambient Background reacting to Artwork with zero mask rasterization cost */}
+          {/* Glassmorphic Ambient Background reacting to Artwork */}
           {hdArtworkUrl && (
             <div
               key={hdArtworkUrl}
-              className="absolute inset-0 -z-20 pointer-events-none scale-105 bg-cover bg-center opacity-20 transition-opacity duration-300"
+              className="absolute inset-0 -z-20 pointer-events-none scale-110 bg-cover bg-center opacity-30 blur-3xl transition-opacity duration-300"
               style={{
                 backgroundImage: `url("${hdArtworkUrl}")`,
               }}
             />
           )}
-          <div className="absolute inset-0 -z-15 pointer-events-none bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(5,5,5,0.92)_75%)]" />
-          <div className="absolute inset-0 -z-10 pointer-events-none bg-gradient-to-b from-black/60 via-[#0a0a0a]/90 to-[#050505]" />
+          <div className="absolute inset-0 -z-15 pointer-events-none bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(5,5,5,0.85)_75%)]" />
+          <div className="absolute inset-0 -z-10 pointer-events-none bg-gradient-to-b from-black/55 via-[#0a0a0a]/85 to-[#050505]/95 backdrop-blur-2xl" />
 
-          {/* ── TOP HEADER (Chevron, Headphones/Lyrics Switcher, Cast, 3-Dots) ── */}
+          {/* ── TOP HEADER (Chevron, Headphones/Lyrics Switcher, 3-Dots) ── */}
           {queueSheetState !== "full" && (
             <header
               onTouchStart={handleHeaderTouchStart}
@@ -1220,14 +1220,14 @@ export function MobileNowPlayingModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex size-10 items-center justify-center rounded-full text-white transition-transform active:scale-90 hover:opacity-80"
+                className="flex size-10 items-center justify-center rounded-full text-white/90 bg-white/10 backdrop-blur-md border border-white/10 transition-transform active:scale-90 hover:opacity-80 shadow-sm"
                 aria-label="Minimize now playing"
               >
                 <ChevronDownIcon size={28} />
               </button>
 
               {/* Audio (Headphone) vs Lyrics Switcher Pill — absolutely centred so unequal L/R buttons don't shift it */}
-              <div className="absolute left-1/2 -translate-x-1/2 flex items-center rounded-full bg-white/10 p-0.5 border border-white/10 shadow-sm">
+              <div className="absolute left-1/2 -translate-x-1/2 flex items-center rounded-full bg-black/40 backdrop-blur-xl p-0.5 border border-white/15 shadow-md">
                 {/* Song / Audio Mode */}
                 <button
                   type="button"
@@ -1377,7 +1377,7 @@ export function MobileNowPlayingModal({
                     {queueSheetState === "collapsed" && (
                       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
                         {/* Like / Dislike Combined Pill */}
-                        <div className="flex items-center rounded-full bg-white/10 hover:bg-white/15 border border-transparent h-9 px-3.5 gap-2.5 text-xs font-medium text-white shrink-0">
+                        <div className="flex items-center rounded-full bg-black/40 backdrop-blur-xl hover:bg-black/50 border border-white/15 h-9 px-3.5 gap-2.5 text-xs font-medium text-white shrink-0 shadow-sm">
                           <button
                             type="button"
                             onClick={handleToggleLike}
@@ -1416,7 +1416,7 @@ export function MobileNowPlayingModal({
                         <button
                           type="button"
                           onClick={() => handleSetAudioMode("lyrics")}
-                          className="flex items-center gap-2 rounded-full h-9 px-4 text-xs font-medium shrink-0 active:scale-95 transition-all bg-white/10 hover:bg-white/15 text-white/90 hover:text-white"
+                          className="flex items-center gap-2 rounded-full h-9 px-4 text-xs font-medium shrink-0 active:scale-95 transition-all bg-black/40 backdrop-blur-xl hover:bg-black/50 border border-white/15 text-white/90 hover:text-white shadow-sm"
                         >
                           <QuoteIcon size={16} />
                           <span>Lyrics</span>
@@ -1426,7 +1426,7 @@ export function MobileNowPlayingModal({
                         <button
                           type="button"
                           onClick={handleSaveToPlaylist}
-                          className="flex items-center gap-2 rounded-full bg-white/10 hover:bg-white/15 h-9 px-4 text-xs font-medium text-white/90 hover:text-white active:scale-95 transition-all shrink-0"
+                          className="flex items-center gap-2 rounded-full bg-black/40 backdrop-blur-xl hover:bg-black/50 border border-white/15 h-9 px-4 text-xs font-medium text-white/90 hover:text-white active:scale-95 transition-all shrink-0 shadow-sm"
                         >
                           <YTSaveIcon size={18} />
                           <span>Save</span>
@@ -1436,7 +1436,7 @@ export function MobileNowPlayingModal({
                         <button
                           type="button"
                           onClick={handleShare}
-                          className="flex items-center gap-2 rounded-full bg-white/10 hover:bg-white/15 h-9 px-4 text-xs font-medium text-white/90 hover:text-white active:scale-95 transition-all shrink-0"
+                          className="flex items-center gap-2 rounded-full bg-black/40 backdrop-blur-xl hover:bg-black/50 border border-white/15 h-9 px-4 text-xs font-medium text-white/90 hover:text-white active:scale-95 transition-all shrink-0 shadow-sm"
                         >
                           <ShareIcon size={18} />
                           <span>Share</span>
@@ -1447,7 +1447,7 @@ export function MobileNowPlayingModal({
                           type="button"
                           onClick={handleToggleDownload}
                           className={cn(
-                            "flex items-center gap-2 rounded-full bg-white/10 hover:bg-white/15 h-9 px-4 text-xs font-medium active:scale-95 transition-all shrink-0",
+                            "flex items-center gap-2 rounded-full bg-black/40 backdrop-blur-xl hover:bg-black/50 border border-white/15 h-9 px-4 text-xs font-medium active:scale-95 transition-all shrink-0 shadow-sm",
                             downloadStatus === "ready"
                               ? "text-white font-semibold"
                               : "text-white/90 hover:text-white",
@@ -1667,10 +1667,10 @@ export function MobileNowPlayingModal({
             className={cn(
               "fixed inset-x-0 bottom-0 top-0 z-40 flex flex-col transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] will-change-transform",
               queueSheetState === "full"
-                ? "bg-[#0a0a0a] text-foreground"
+                ? "bg-[#0a0a0a]/95 backdrop-blur-2xl text-foreground"
                 : queueSheetState === "half"
-                ? "bg-[#141414] rounded-t-3xl border-t border-white/15 shadow-[0_-16px_48px_rgba(0,0,0,0.85)]"
-                : "bg-gradient-to-t from-[#0e0e0e] to-[#161616] border-t border-white/10 cursor-pointer",
+                ? "bg-[#121215]/85 backdrop-blur-2xl rounded-t-3xl border-t border-white/20 shadow-[0_-16px_48px_rgba(0,0,0,0.9),inset_0_1px_0_0_rgba(255,255,255,0.2)]"
+                : "bg-[#121215]/80 backdrop-blur-xl border-t border-white/15 cursor-pointer shadow-[0_-8px_24px_rgba(0,0,0,0.6)]",
             )}
           >
             {/* DRAG HANDLE & HEADER BAR */}

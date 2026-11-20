@@ -174,19 +174,30 @@ export function MobilePlayerBarInner({ onOpenNowPlaying, className }: MobilePlay
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         className={cn(
-          "relative flex w-full flex-col overflow-hidden rounded-xl",
-          "bg-[#212124] border border-white/[0.08] shadow-[0_8px_24px_rgba(0,0,0,0.7)]",
+          "relative flex w-full flex-col overflow-hidden rounded-2xl",
+          "bg-[#141417]/80 backdrop-blur-2xl backdrop-saturate-150 border border-white/15",
+          "shadow-[0_12px_36px_rgba(0,0,0,0.8),inset_0_1px_0_0_rgba(255,255,255,0.2)]",
           "cursor-pointer select-none active:scale-[0.985] transition-transform duration-100 ease-out",
           className,
         )}
       >
+        {/* Dynamic Ambient Artwork Glow for Glass Refraction */}
+        {currentTrack.artworkUrl && (
+          <div
+            className="absolute -inset-2 -z-10 bg-cover bg-center blur-2xl opacity-35 scale-125 pointer-events-none"
+            style={{ backgroundImage: `url("${currentTrack.artworkUrl}")` }}
+          />
+        )}
+        {/* Specular Top Shine */}
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
+
         {/* Top Progress Line */}
         <MiniPlayerProgress trackId={currentTrack.id} isPlaying={isPlaying} />
 
         {/* Structured Content Row */}
         <div className="flex items-center gap-3 px-2.5 py-1.5">
           {/* Track Artwork Thumbnail */}
-          <div className="relative size-11 shrink-0 overflow-hidden rounded-lg shadow-sm bg-white/5">
+          <div className="relative size-11 shrink-0 overflow-hidden rounded-xl shadow-md border border-white/15 bg-white/5">
             <TrackArtwork
               artworkUrl={currentTrack.artworkUrl}
               size={48}
