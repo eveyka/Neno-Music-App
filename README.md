@@ -139,8 +139,8 @@ Official binaries and APKs are available on the **[Releases Page (v1.0.5)](https
 
 | Platform | Download Package | Details |
 |---|---|---|
-| **Android (ARM64)** | [Neon-Music-v1.0.5-arm64-v8a.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.5/Neon-Music-v1.0.5-arm64-v8a.apk) | **Recommended** for modern phones (~11.3 MB) |
-| **Android (Universal)** | [Neon-Music-v1.0.5-universal.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.5/Neon-Music-v1.0.5-universal.apk) | Compatible with all Android architectures (~35 MB) |
+| **Android (ARM64)** | [Neno-Music-v1.0.5-Android-arm64.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.5/Neno-Music-v1.0.5-Android-arm64.apk) | **Recommended** for modern phones (~11.3 MB) |
+| **Android (Universal)** | [Neno-Music-v1.0.5-Android-universal.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.5/Neno-Music-v1.0.5-Android-universal.apk) | Compatible with all Android architectures (~35 MB) |
 | **Android (ARM32)** | [Neon-Music-v1.0.5-armeabi-v7a.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.5/Neon-Music-v1.0.5-armeabi-v7a.apk) | For legacy 32-bit Android devices (~10 MB) |
 | **iOS (iPhone / iPad)** | [Neno-Music-v1.0.5-iOS.ipa](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.5/Neno-Music-v1.0.5-iOS.ipa) | Sideload via AltStore, Sideloadly, TrollStore |
 | **Windows / macOS / Linux** | [Desktop Releases](https://github.com/eveyka/Neno-Music-App/releases/tag/v1.0.5) | Direct MSI, DMG, AppImage, and DEB builds |
