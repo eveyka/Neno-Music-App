@@ -6176,14 +6176,20 @@ export class YouTubeMusicDataSource extends DataSource {
 
     if (surface === "home" || (typeof surface === "object" && surface.browseId === "FEmusic_home")) {
       let currentPage: any = response;
-      for (let pageIdx = 0; pageIdx < 2; pageIdx++) {
+      // If we already collected >= 6 sections from the initial response, 1 fast continuation is plenty
+      const maxPages = allSections.length >= 6 ? 1 : 2;
+      for (let pageIdx = 0; pageIdx < maxPages; pageIdx++) {
         const continuation = this.getMusicContinuation(client, currentPage);
         if (!continuation) break;
         try {
-          currentPage = await continuation.load();
+          const continuationPromise = continuation.load();
+          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500));
+          currentPage = await Promise.race([continuationPromise, timeoutPromise]);
           if (currentPage) {
             const nextSections = this.collectBrowseSections(currentPage);
             allSections.push(...nextSections);
+          } else {
+            break;
           }
         } catch (e) {
           logInternalWarn("YouTubeMusicDataSource.refreshBrowsePage continuation failed", {
@@ -6227,106 +6233,112 @@ export class YouTubeMusicDataSource extends DataSource {
       shelves.push(shelf);
     }
 
-    // Ensure essential YouTube Music shelves ("From the community", "Mixed for you", "Covers and remixes", "Trending songs for you") are present on home surface
+    // Ensure essential YouTube Music shelves ("Your Daily Discover", "From the community", "Mixed for you", "Covers and remixes", "Trending songs for you") are present on home surface
     const isHomeSurface = surface === "home" || (typeof surface === "object" && surface.browseId === "FEmusic_home");
     if (isHomeSurface) {
-      const hasCommunityShelf = shelves.some((s) => {
-        const t = s.title.toLowerCase();
-        return t.includes("community") || t.includes("कम्युनिटी");
-      });
-      const hasMixedShelf = shelves.some((s) => {
-        const t = s.title.toLowerCase();
-        return t.includes("mixed") || t.includes("mixes") || t.includes("मिक्स") || t.includes("supermix");
-      });
-      const hasCoversShelf = shelves.some((s) => {
-        const t = s.title.toLowerCase();
-        return t.includes("cover") || t.includes("remix") || t.includes("कवर") || t.includes("रीमिक्स");
-      });
-      const hasTrendingShelf = shelves.some((s) => {
-        const t = s.title.toLowerCase();
-        return t.includes("trending") || t.includes("trend") || t.includes("ट्रेंडिंग");
-      });
+      // Step A: Extract authentic YouTube Music "Your Daily Discover" / "Discover Mix" tracks directly into top shelf
+      await this.ensureDailyDiscoverShelf(client, shelves);
 
-      const fallbackSearches: Promise<void>[] = [];
+      // Step B: Only run fallback searches if home feed is sparse (fewer than 4 shelves)
+      if (shelves.length < 4) {
+        const hasCommunityShelf = shelves.some((s) => {
+          const t = s.title.toLowerCase();
+          return t.includes("community") || t.includes("कम्युनिटी");
+        });
+        const hasMixedShelf = shelves.some((s) => {
+          const t = s.title.toLowerCase();
+          return t.includes("mixed") || t.includes("mixes") || t.includes("मिक्स") || t.includes("supermix");
+        });
+        const hasCoversShelf = shelves.some((s) => {
+          const t = s.title.toLowerCase();
+          return t.includes("cover") || t.includes("remix") || t.includes("कवर") || t.includes("रीमिक्स");
+        });
+        const hasTrendingShelf = shelves.some((s) => {
+          const t = s.title.toLowerCase();
+          return t.includes("trending") || t.includes("trend") || t.includes("ट्रेंडिंग");
+        });
 
-      if (!hasTrendingShelf) {
-        fallbackSearches.push((async () => {
-          try {
-            const res = await client.music.search("Trending songs", { type: "playlist" });
-            const node = (res as any)?.contents?.[0] ?? res;
-            if (node) {
-              const shelf = this.toBrowseShelf("Trending songs for you", (node as any).contents ?? node, []);
-              if (shelf.playlists.length > 0 || shelf.tracks.length > 0) {
-                shelves.push(shelf);
+        const fallbackSearches: Promise<void>[] = [];
+
+        if (!hasTrendingShelf) {
+          fallbackSearches.push((async () => {
+            try {
+              const res = await client.music.search("Trending songs", { type: "playlist" });
+              const node = (res as any)?.contents?.[0] ?? res;
+              if (node) {
+                const shelf = this.toBrowseShelf("Trending songs for you", (node as any).contents ?? node, []);
+                if (shelf.playlists.length > 0 || shelf.tracks.length > 0) {
+                  shelves.push(shelf);
+                }
               }
+            } catch (err) {
+              logInternalWarn("YouTubeMusicDataSource fallback trending search failed", {
+                error: err instanceof Error ? err.message : String(err),
+              });
             }
-          } catch (err) {
-            logInternalWarn("YouTubeMusicDataSource fallback trending search failed", {
-              error: err instanceof Error ? err.message : String(err),
-            });
-          }
-        })());
-      }
+          })());
+        }
 
-      if (!hasMixedShelf) {
-        fallbackSearches.push((async () => {
-          try {
-            const res = await client.music.search("Mixed for you", { type: "playlist" });
-            const node = (res as any)?.contents?.[0] ?? res;
-            if (node) {
-              const shelf = this.toBrowseShelf("Mixed for you", (node as any).contents ?? node, []);
-              if (shelf.playlists.length > 0 || shelf.tracks.length > 0) {
-                shelves.push(shelf);
+        if (!hasMixedShelf) {
+          fallbackSearches.push((async () => {
+            try {
+              const res = await client.music.search("Mixed for you", { type: "playlist" });
+              const node = (res as any)?.contents?.[0] ?? res;
+              if (node) {
+                const shelf = this.toBrowseShelf("Mixed for you", (node as any).contents ?? node, []);
+                if (shelf.playlists.length > 0 || shelf.tracks.length > 0) {
+                  shelves.push(shelf);
+                }
               }
+            } catch (err) {
+              logInternalWarn("YouTubeMusicDataSource fallback mixed search failed", {
+                error: err instanceof Error ? err.message : String(err),
+              });
             }
-          } catch (err) {
-            logInternalWarn("YouTubeMusicDataSource fallback mixed search failed", {
-              error: err instanceof Error ? err.message : String(err),
-            });
-          }
-        })());
-      }
+          })());
+        }
 
-      if (!hasCommunityShelf) {
-        fallbackSearches.push((async () => {
-          try {
-            const res = await client.music.search("community playlist", { type: "playlist" });
-            const node = (res as any)?.contents?.[0] ?? res;
-            if (node) {
-              const shelf = this.toBrowseShelf("From the community", (node as any).contents ?? node, []);
-              if (shelf.playlists.length > 0) {
-                shelves.push(shelf);
+        if (!hasCommunityShelf) {
+          fallbackSearches.push((async () => {
+            try {
+              const res = await client.music.search("community playlist", { type: "playlist" });
+              const node = (res as any)?.contents?.[0] ?? res;
+              if (node) {
+                const shelf = this.toBrowseShelf("From the community", (node as any).contents ?? node, []);
+                if (shelf.playlists.length > 0) {
+                  shelves.push(shelf);
+                }
               }
+            } catch (err) {
+              logInternalWarn("YouTubeMusicDataSource fallback community search failed", {
+                error: err instanceof Error ? err.message : String(err),
+              });
             }
-          } catch (err) {
-            logInternalWarn("YouTubeMusicDataSource fallback community search failed", {
-              error: err instanceof Error ? err.message : String(err),
-            });
-          }
-        })());
-      }
+          })());
+        }
 
-      if (!hasCoversShelf) {
-        fallbackSearches.push((async () => {
-          try {
-            const res = await client.music.search("Covers and remixes", { type: "playlist" });
-            const node = (res as any)?.contents?.[0] ?? res;
-            if (node) {
-              const shelf = this.toBrowseShelf("Covers and remixes", (node as any).contents ?? node, []);
-              if (shelf.playlists.length > 0 || shelf.tracks.length > 0) {
-                shelves.push(shelf);
+        if (!hasCoversShelf) {
+          fallbackSearches.push((async () => {
+            try {
+              const res = await client.music.search("Covers and remixes", { type: "playlist" });
+              const node = (res as any)?.contents?.[0] ?? res;
+              if (node) {
+                const shelf = this.toBrowseShelf("Covers and remixes", (node as any).contents ?? node, []);
+                if (shelf.playlists.length > 0 || shelf.tracks.length > 0) {
+                  shelves.push(shelf);
+                }
               }
+            } catch (err) {
+              logInternalWarn("YouTubeMusicDataSource fallback covers search failed", {
+                error: err instanceof Error ? err.message : String(err),
+              });
             }
-          } catch (err) {
-            logInternalWarn("YouTubeMusicDataSource fallback covers search failed", {
-              error: err instanceof Error ? err.message : String(err),
-            });
-          }
-        })());
-      }
+          })());
+        }
 
-      if (fallbackSearches.length > 0) {
-        await Promise.allSettled(fallbackSearches);
+        if (fallbackSearches.length > 0) {
+          await Promise.allSettled(fallbackSearches);
+        }
       }
     }
 
@@ -6526,6 +6538,146 @@ export class YouTubeMusicDataSource extends DataSource {
     }
 
     return links;
+  }
+
+  /**
+   * Ensures the authentic YouTube Music "Your Daily Discover" / "Discover Mix" tracks are
+   * extracted and positioned at the top of the home shelves.
+   */
+  private async ensureDailyDiscoverShelf(
+    client: Innertube,
+    shelves: BrowseShelf[],
+  ): Promise<void> {
+    const isDiscoverTitle = (title: string): boolean => {
+      const t = title.toLowerCase();
+      return (
+        t.includes("discover") ||
+        t.includes("डिस्कवर") ||
+        t.includes("daily discover") ||
+        t.includes("खोज")
+      );
+    };
+
+    // 1. Is there an existing shelf with discover in its title and tracks?
+    const existingDiscoverShelf = shelves.find((s) => isDiscoverTitle(s.title));
+    if (existingDiscoverShelf && existingDiscoverShelf.tracks.length > 0) {
+      existingDiscoverShelf.title = "Your Daily Discover";
+      const idx = shelves.indexOf(existingDiscoverShelf);
+      if (idx > 0) {
+        shelves.splice(idx, 1);
+        shelves.unshift(existingDiscoverShelf);
+      }
+      return;
+    }
+
+    // 2. If an existing discover shelf has playlists instead of tracks, fetch its playlist tracks
+    if (existingDiscoverShelf && existingDiscoverShelf.playlists.length > 0) {
+      try {
+        const playlist = existingDiscoverShelf.playlists[0];
+        const page = (await client.music.getPlaylist(playlist.id)) as YouTubeMusicPlaylistPage;
+        const tracks = this.collectParsedPlaylistPageTracks(page, new Set());
+        if (tracks.length > 0) {
+          existingDiscoverShelf.title = "Your Daily Discover";
+          existingDiscoverShelf.tracks = tracks;
+          existingDiscoverShelf.items = tracks.map((t) => ({ kind: "track", item: t }));
+          const idx = shelves.indexOf(existingDiscoverShelf);
+          if (idx > 0) {
+            shelves.splice(idx, 1);
+            shelves.unshift(existingDiscoverShelf);
+          }
+          return;
+        }
+      } catch (err) {
+        logInternalWarn("YouTubeMusicDataSource.ensureDailyDiscoverShelf existing playlist fetch failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // 3. Scan all playlists in all shelves (such as "Mixed for you" / "Mixes")
+    let discoverPlaylist: Playlist | null = null;
+    for (const shelf of shelves) {
+      for (const p of shelf.playlists) {
+        if (isDiscoverTitle(p.title)) {
+          discoverPlaylist = p;
+          break;
+        }
+      }
+      if (discoverPlaylist) break;
+    }
+
+    if (discoverPlaylist) {
+      try {
+        const page = (await client.music.getPlaylist(discoverPlaylist.id)) as YouTubeMusicPlaylistPage;
+        const tracks = this.collectParsedPlaylistPageTracks(page, new Set());
+        if (tracks.length > 0) {
+          const discoverShelf: BrowseShelf = {
+            title: "Your Daily Discover",
+            tracks,
+            albums: [],
+            playlists: [discoverPlaylist],
+            artists: [],
+            links: [],
+            items: tracks.map((t) => ({ kind: "track", item: t })),
+          };
+          shelves.unshift(discoverShelf);
+          return;
+        }
+      } catch (err) {
+        logInternalWarn("YouTubeMusicDataSource.ensureDailyDiscoverShelf discovered playlist fetch failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // 4. If still not found, search YouTube Music specifically for "Your Daily Discover" or "Discover Mix" playlist
+    try {
+      const searchRes = await client.music.search("Your Daily Discover", { type: "playlist" });
+      const node = (searchRes as any)?.contents?.[0] ?? searchRes;
+      if (node) {
+        const tempShelf = this.toBrowseShelf("Discover", (node as any).contents ?? node, []);
+        const candidate = tempShelf.playlists.find((p) => isDiscoverTitle(p.title)) ?? tempShelf.playlists[0];
+        if (candidate) {
+          const page = (await client.music.getPlaylist(candidate.id)) as YouTubeMusicPlaylistPage;
+          const tracks = this.collectParsedPlaylistPageTracks(page, new Set());
+          if (tracks.length > 0) {
+            const discoverShelf: BrowseShelf = {
+              title: "Your Daily Discover",
+              tracks,
+              albums: [],
+              playlists: [candidate],
+              artists: [],
+              links: [],
+              items: tracks.map((t) => ({ kind: "track", item: t })),
+            };
+            shelves.unshift(discoverShelf);
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      logInternalWarn("YouTubeMusicDataSource.ensureDailyDiscoverShelf fallback search failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // 5. Safe instant fallback: clone quick picks tracks if available
+    const quickPicks = shelves.find((s) => {
+      const t = s.title.toLowerCase();
+      return t.includes("quick pick") || t.includes("त्वरित") || t.includes("क्विक");
+    });
+    if (quickPicks && quickPicks.tracks.length > 0) {
+      const discoverShelf: BrowseShelf = {
+        title: "Your Daily Discover",
+        tracks: [...quickPicks.tracks],
+        albums: [],
+        playlists: [],
+        artists: [],
+        links: [],
+        items: quickPicks.tracks.map((t) => ({ kind: "track", item: t })),
+      };
+      shelves.unshift(discoverShelf);
+    }
   }
 
   /**

@@ -382,6 +382,7 @@ export function HomePage({
       (s) =>
         s !== trendingCommunityShelf &&
         !s.title.toLowerCase().includes("discover") &&
+        !s.title.includes("डिस्कवर") &&
         !s.title.includes("खोज"),
     );
 
@@ -399,24 +400,26 @@ export function HomePage({
   }, [orderedShelves, trendingCommunityShelf]);
 
   const dailyDiscoverTracks = useMemo(() => {
-    // 1. Look for explicit discover/quick picks shelf with tracks
-    const explicitDiscover = ytmHomeFeed?.shelves.find(
-      (s) =>
+    // 1. Prioritize authentic YouTube Music "Your Daily Discover" / "Discover Mix" shelf
+    const discoverShelf = ytmHomeFeed?.shelves.find((s) => {
+      const t = s.title.toLowerCase();
+      return (
         s.tracks.length > 0 &&
-        (s.title.toLowerCase().includes("discover") ||
-          s.title.includes("खोज") ||
-          isQuickPicksTitle(s.title)),
-    );
-    if (explicitDiscover && explicitDiscover.tracks.length > 0) {
-      return explicitDiscover.tracks.slice(0, 12);
+        (t.includes("discover") || t.includes("डिस्कवर") || t.includes("daily discover") || t.includes("खोज"))
+      );
+    });
+    if (discoverShelf && discoverShelf.tracks.length > 0) {
+      return discoverShelf.tracks.slice(0, 16);
     }
-    // 2. Look for quick picks shelf tracks
+
+    // 2. Fallback to Quick picks shelf tracks
     if (quickPicksShelf && quickPicksShelf.tracks.length > 0) {
-      return quickPicksShelf.tracks.slice(0, 12);
+      return quickPicksShelf.tracks.slice(0, 16);
     }
-    // 3. Fallback to suggestions / recommendations
+
+    // 3. Fallback to suggestions
     if (suggestions && suggestions.length > 0) {
-      return suggestions.slice(0, 12);
+      return suggestions.slice(0, 16);
     }
     return [];
   }, [ytmHomeFeed, quickPicksShelf, suggestions]);
@@ -565,62 +568,30 @@ export function HomePage({
     if (isRefreshing) return;
     setIsRefreshing(true);
     setIsLoadingSuggestions(true);
-    setSuggestions([]);
-    if (showYtmHomeFeed && libraryState.status === "ready") {
-      setIsLoadingHomeFeed(true);
-      setYtmHomeFeed(null);
-    }
 
+    // Invalidate local in-memory persistent cache so fresh data takes over immediately
     persistentSuggestions = null;
     persistentHomeFeed = null;
     suggestionCache.clear();
     suggestionLoads.clear();
-
-    const fetchSuggestions = async () => {
-      try {
-        const seeds = shuffle(recentlyPlayed).slice(0, 4);
-        let loaded: Track[] = [];
-
-        if (seeds.length > 0) {
-          const recommendationSets = await Promise.allSettled(
-            seeds.map((seed) => libraryController.getRecommendations(seed)),
-          );
-          loaded = recommendationSets.flatMap((result) =>
-            result.status === "fulfilled" ? result.value : []
-          );
-        }
-
-        // Always query 2-3 randomized discovery topics for a fresh, rich songs refresh
-        const randomQueries = shuffle(DISCOVERY_QUERIES).slice(0, 3);
-        const searchSets = await Promise.allSettled(
-          randomQueries.map((query) => searchController.searchTracks(query)),
-        );
-        for (const res of searchSets) {
-          if (res.status === "fulfilled") {
-            loaded.push(...res.value);
-          }
-        }
-
-        const fresh = shuffle(uniqueTracks([...loaded, ...recentlyPlayed])).slice(0, 36);
-        persistentSuggestions = fresh;
-        writeSuggestionCache(suggestionCacheKey, fresh);
-        setSuggestions(fresh);
-      } catch (err) {
-        logInternalError("HomePage.handleRefresh suggestions failed", err);
-      } finally {
-        setIsLoadingSuggestions(false);
-      }
-    };
 
     const fetchHomeFeed = async () => {
       if (!showYtmHomeFeed || libraryState.status !== "ready") {
         setIsLoadingHomeFeed(false);
         return;
       }
+      setIsLoadingHomeFeed(true);
       try {
+        // Pass forceRefresh = true to bypass cache and fetch fresh from YouTube Music
         const page = await libraryController.getBrowsePage("home", true);
         persistentHomeFeed = page;
         setYtmHomeFeed(page);
+        const allFeedTracks = page.shelves.flatMap((s) => s.tracks);
+        if (allFeedTracks.length > 0) {
+          const fresh = uniqueTracks(allFeedTracks).slice(0, 36);
+          persistentSuggestions = fresh;
+          setSuggestions(fresh);
+        }
       } catch (err) {
         logInternalError("HomePage.handleRefresh ytmHomeFeed failed", err);
       } finally {
@@ -628,8 +599,27 @@ export function HomePage({
       }
     };
 
+    const fetchSuggestionsFallback = async () => {
+      if (showYtmHomeFeed && libraryState.status === "ready") {
+        return;
+      }
+      try {
+        const randomQueries = shuffle(DISCOVERY_QUERIES).slice(0, 1);
+        const results = await searchController.searchTracks(randomQueries[0]);
+        if (results.length > 0) {
+          const fresh = shuffle(uniqueTracks([...results, ...recentlyPlayed])).slice(0, 36);
+          persistentSuggestions = fresh;
+          writeSuggestionCache(suggestionCacheKey, fresh);
+          setSuggestions(fresh);
+        }
+      } catch (err) {
+        logInternalError("HomePage.handleRefresh suggestions fallback failed", err);
+      }
+    };
+
     void libraryController.refresh({ suppressFailure: true }).catch(() => {});
-    await Promise.allSettled([fetchSuggestions(), fetchHomeFeed()]);
+    await Promise.allSettled([fetchHomeFeed(), fetchSuggestionsFallback()]);
+    setIsLoadingSuggestions(false);
     setIsRefreshing(false);
   }, [
     isRefreshing,
@@ -962,7 +952,7 @@ export function HomePage({
 
       {/* ── 1. Topmost: Daily Discover Songs (Direct songs, NO title) ─────── */}
       <section className="w-full">
-        {loadingMoodId ? (
+        {loadingMoodId || isRefreshing ? (
           /* INSTANT SWIMMING SHIMMER CARDS FOR DISCOVER */
           <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-1 snap-x snap-mandatory scroll-px-4 sm:scroll-px-6 no-scrollbar overscroll-x-contain">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -986,6 +976,7 @@ export function HomePage({
               <DailyDiscoverCard
                 key={track.id}
                 track={track}
+                queue={dailyDiscoverTracks}
                 playerController={playerController}
               />
             ))}

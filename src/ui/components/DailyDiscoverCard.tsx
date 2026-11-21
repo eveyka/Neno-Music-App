@@ -8,6 +8,7 @@ import { useTrackContextMenu } from "./TrackContextMenu";
 
 interface DailyDiscoverCardProps {
   track: Track;
+  queue?: readonly Track[];
   reasonText?: string;
   playerController: PlayerControllerActions;
   className?: string;
@@ -15,6 +16,7 @@ interface DailyDiscoverCardProps {
 
 export const DailyDiscoverCard = memo(function DailyDiscoverCard({
   track,
+  queue,
   reasonText,
   playerController,
   className,
@@ -26,17 +28,23 @@ export const DailyDiscoverCard = memo(function DailyDiscoverCard({
     const now = Date.now();
     if (now - lastPlayTimeRef.current < 500) return;
     lastPlayTimeRef.current = now;
-    void playerController.playTrackById(track.id);
+    void playerController.playTrackById(track.id, queue);
   };
 
-  const subtitle = [track.artist, track.viewCountText].filter(Boolean).join(" • ") || track.artist || "Recommended";
-  const recommendationTag = reasonText || `For fans of ${track.artist || "Top Artists"}`;
+  const handleWarm = () => {
+    playerController.warmTrack(track);
+  };
+
+  const subtitle = [track.artist, track.viewCountText].filter(Boolean).join(" • ") || track.artist || "YouTube Music Discover";
+  const recommendationTag = reasonText || `YouTube Music • Daily Discover`;
 
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={handlePlay}
+      onMouseEnter={handleWarm}
+      onTouchStart={handleWarm}
       onContextMenu={(e) => openTrackMenu(e, track)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
