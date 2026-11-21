@@ -476,7 +476,9 @@ export class AudioEngine {
     this.userPaused = false;
     const claimId = this.claimPlayback();
     if (this.rustTrackId) {
-      await rustAudio.setVolume(this.volume, this.muted);
+      if (!this.crossfadeActive) {
+        await rustAudio.setVolume(this.volume, this.muted);
+      }
       await rustAudio.play();
       return claimId === playbackClaimId && playbackOwner === this;
     }
@@ -484,7 +486,9 @@ export class AudioEngine {
       if (!this.audio || !this.currentVideoId) {
         throw new Error("No audio track is loaded.");
       }
-      this.applyNativeAudioSettings();
+      if (!this.crossfadeActive) {
+        this.applyNativeAudioSettings();
+      }
       await this.audio.play();
       return claimId === playbackClaimId && playbackOwner === this;
     }
@@ -997,19 +1001,15 @@ export class AudioEngine {
         logInternalWarn("AudioEngine.transitionToPreloaded native play failed", { videoId, error: err });
       }
 
-      if (fadeMs > 0 && outgoing) {
+      const effectiveFadeMs = fadeMs > 0 ? fadeMs : 40;
+      if (outgoing) {
         this.crossfadeActive = true;
         if (this.crossfadeTimerId !== null) window.clearTimeout(this.crossfadeTimerId);
         this.crossfadeTimerId = window.setTimeout(() => {
           this.crossfadeActive = false;
           this.crossfadeTimerId = null;
-        }, fadeMs + 200);
-        void this.rampNativeAudioAcross(outgoing, incoming, targetVolume, fadeMs, outgoingUrl);
-      } else if (outgoing) {
-        outgoing.pause();
-        outgoing.removeAttribute("src");
-        outgoing.load();
-        if (outgoingUrl) URL.revokeObjectURL(outgoingUrl);
+        }, effectiveFadeMs + 200);
+        void this.rampNativeAudioAcross(outgoing, incoming, targetVolume, effectiveFadeMs, outgoingUrl);
       }
 
       logInternalInfo("AudioEngine.transitionToPreloaded native", { videoId, fadeMs });
@@ -1074,11 +1074,12 @@ export class AudioEngine {
         }, fadeMs + 200);
       }
 
-      if (fadeMs > 0 && outgoing) {
+      const effectiveFadeMs = fadeMs > 0 ? fadeMs : 40;
+      if (outgoing) {
         const targetVolume = this.muted ? 0 : this.volume;
         const startedAt = performance.now();
         const intervalId = window.setInterval(() => {
-          const progress = Math.min(1, (performance.now() - startedAt) / fadeMs);
+          const progress = Math.min(1, (performance.now() - startedAt) / effectiveFadeMs);
           outgoing.volume = Math.max(0, Math.min(1, targetVolume * Math.cos((progress * Math.PI) / 2)));
           if (progress >= 1) {
             window.clearInterval(intervalId);
@@ -1088,11 +1089,6 @@ export class AudioEngine {
             if (outgoingUrl) URL.revokeObjectURL(outgoingUrl);
           }
         }, 20);
-      } else if (outgoing) {
-        outgoing.pause();
-        outgoing.removeAttribute("src");
-        outgoing.load();
-        if (outgoingUrl) URL.revokeObjectURL(outgoingUrl);
       }
 
       logInternalInfo("AudioEngine.transitionToPreloaded native-to-rust", { videoId, fadeMs });
@@ -1620,7 +1616,7 @@ export class AudioEngine {
       if (engine !== this) engine.pauseForPlaybackClaim();
     }
     for (const media of document.querySelectorAll<HTMLMediaElement>("audio, video")) {
-      if (media !== this.audio && media !== this.standbyAudio && !media.hasAttribute("data-keepalive")) {
+      if (media !== this.audio && media !== this.standbyAudio && !media.hasAttribute("data-keepalive") && !this.crossfadeActive) {
         media.pause();
       }
     }

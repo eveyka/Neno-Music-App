@@ -972,9 +972,18 @@ impl Engine {
 
                 self.cancel_fade();
                 let target = self.output_volume();
+                let effective_fade_ms = if fade_ms > 0 {
+                    fade_ms
+                } else {
+                    // Seamless micro-handover (40ms):
+                    // Overlaps the outgoing and incoming sinks briefly to eliminate the
+                    // hardware audio buffer underrun / 0.1s silence gap during track transitions.
+                    40
+                };
+
                 self.decks[standby]
                     .sink
-                    .set_volume(if fade_ms > 0 { 0.0 } else { target });
+                    .set_volume(if effective_fade_ms > 0 { 0.0 } else { target });
                 self.decks[standby].sink.set_speed(self.rate);
                 self.decks[standby].sink.play();
 
@@ -982,15 +991,11 @@ impl Engine {
                 self.active = standby;
                 self.playing = true;
 
-                if fade_ms > 0 {
-                    self.fade = Some(Fade {
-                        started_at: Instant::now(),
-                        duration: Duration::from_millis(fade_ms),
-                        outgoing,
-                    });
-                } else {
-                    self.decks[outgoing].clear();
-                }
+                self.fade = Some(Fade {
+                    started_at: Instant::now(),
+                    duration: Duration::from_millis(effective_fade_ms),
+                    outgoing,
+                });
                 let _ = reply.send(true);
             }
             Command::HasStandby { track_id, reply } => {

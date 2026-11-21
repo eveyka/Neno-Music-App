@@ -118,6 +118,7 @@ class MediaPlaybackService : Service() {
 
     private var audioManager: AudioManager? = null
     // Interruption State Management ("Shift System")
+    private var hasAudioFocus: Boolean = false
     private var pausedDueToInterruption: Boolean = false
     private var isInterruptedByCall: Boolean = false
     private var isInterruptedByAudioFocus: Boolean = false
@@ -232,6 +233,7 @@ class MediaPlaybackService : Service() {
                 }
             }
             AudioManager.AUDIOFOCUS_LOSS -> {
+                hasAudioFocus = false
                 // If focus loss arrives within 1800ms of user requesting playback, ignore it!
                 if (SystemClock.elapsedRealtime() - lastPlayStartTime < 1800L) {
                     return@OnAudioFocusChangeListener
@@ -256,6 +258,7 @@ class MediaPlaybackService : Service() {
                 }
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
+                hasAudioFocus = true
                 if (isCallOngoing) {
                     if (isSystemInCallMode()) {
                         // Call is still active according to audio manager mode, wait until ended
@@ -274,8 +277,9 @@ class MediaPlaybackService : Service() {
     }
 
     private fun requestAudioFocus(): Boolean {
+        if (hasAudioFocus) return true
         val am = audioManager ?: return false
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (audioFocusRequest == null) {
                 val audioAttributes = AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -296,9 +300,13 @@ class MediaPlaybackService : Service() {
                 AudioManager.AUDIOFOCUS_GAIN
             ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         }
+        hasAudioFocus = granted
+        return granted
     }
 
     private fun abandonAudioFocus() {
+        if (!hasAudioFocus) return
+        hasAudioFocus = false
         val am = audioManager ?: return
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -768,7 +776,9 @@ class MediaPlaybackService : Service() {
                     isInterruptedByCall = false
                     isInterruptedByAudioFocus = false
                     isInterruptedByBluetoothShift = false
-                    requestAudioFocus()
+                    if (!hasAudioFocus) {
+                        requestAudioFocus()
+                    }
                     acquireWakeLock()
                     registerNoisyReceiver()
                 } else {
@@ -981,7 +991,7 @@ class MediaPlaybackService : Service() {
                 PlaybackStateCompat.ACTION_STOP
 
             val sessionState = when (currentPlaybackState) {
-                "loading" -> PlaybackStateCompat.STATE_BUFFERING
+                "loading" -> if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_BUFFERING
                 "playing" -> PlaybackStateCompat.STATE_PLAYING
                 else -> PlaybackStateCompat.STATE_PAUSED
             }

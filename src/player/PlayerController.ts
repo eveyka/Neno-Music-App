@@ -426,7 +426,8 @@ export class PlayerController {
      * the very thing that makes the next track start instantly. When the track being asked for
      * is the one already cued, the transition in ensureTrackLoaded takes over the handover.
      */
-    if (!this.audioEngine.hasPreloaded(videoId)) {
+    const isPreloaded = this.audioEngine.hasPreloaded(videoId);
+    if (!isPreloaded) {
       this.audioEngine.stop();
       this.audioEngine.silenceCompetingPlayback();
     }
@@ -449,7 +450,7 @@ export class PlayerController {
           this.queue.shuffleAll(this.queue.queuedManually);
         }
       }
-      this.setState({ status: "loading", error: null });
+      this.setState({ status: isPreloaded ? "playing" : "loading", error: null });
 
       const queuedTrack = playbackQueue?.find((item) => item.id === videoId)
         ?? this.queue.all.find((item) => item.id === videoId);
@@ -539,7 +540,7 @@ export class PlayerController {
       this.setState({
         currentTrack: track,
         history: this.appendHistory(track),
-        status: "loading",
+        status: isPreloaded ? "playing" : "loading",
         error: null,
         playbackOrderMode: this.playbackOrderMode,
         shuffleEnabled: this.shuffleEnabled,
@@ -550,12 +551,18 @@ export class PlayerController {
       await this.ensureTrackLoaded(track);
       if (requestId !== this.playTrackRequestId) return false;
 
-      let playbackStarted = await this.playLoadedTrack();
-      if (!playbackStarted) {
-        logInternalWarn("PlayerController.playTrackById initial playLoadedTrack returned false, retrying once", {
-          trackId: track.id,
-        });
+      // When the track was preloaded and successfully swapped in ensureTrackLoaded,
+      // the deck is already playing smoothly. Calling playLoadedTrack() is only needed for cold loads.
+      const alreadyPlayingAfterPreloadSwap = isPreloaded && this.loadedTrackId === track.id;
+      let playbackStarted = true;
+      if (!alreadyPlayingAfterPreloadSwap) {
         playbackStarted = await this.playLoadedTrack();
+        if (!playbackStarted) {
+          logInternalWarn("PlayerController.playTrackById initial playLoadedTrack returned false, retrying once", {
+            trackId: track.id,
+          });
+          playbackStarted = await this.playLoadedTrack();
+        }
       }
       if (!playbackStarted) {
         if (requestId !== this.playTrackRequestId) return false;
