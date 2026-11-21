@@ -39,6 +39,7 @@ android {
                 keyPassword = "neno123"
                 enableV1Signing = true
                 enableV2Signing = true
+                enableV3Signing = true
             } else {
                 val debugKeystore = signingConfigs.getByName("debug")
                 storeFile = debugKeystore.storeFile
@@ -47,6 +48,7 @@ android {
                 keyPassword = debugKeystore.keyPassword
                 enableV1Signing = true
                 enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
@@ -64,8 +66,10 @@ android {
             }
         }
         getByName("release") {
-            manifestPlaceholders["usesCleartextTraffic"] = "true"
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
             signingConfig = signingConfigs.getByName("release")
+            isDebuggable = false
+            isJniDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

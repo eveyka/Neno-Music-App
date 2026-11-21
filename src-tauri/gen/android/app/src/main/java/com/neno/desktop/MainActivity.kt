@@ -228,9 +228,12 @@ class MainActivity : TauriActivity() {
                     cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
                     useWideViewPort = true
                     loadWithOverviewMode = true
-                    mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                    allowFileAccess = true
-                    allowContentAccess = true
+                    mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                    allowFileAccess = false
+                    allowContentAccess = false
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        safeBrowsingEnabled = true
+                    }
                 }
                 webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
                 webView.setBackgroundColor(android.graphics.Color.parseColor("#050505"))
@@ -759,29 +762,28 @@ class MainActivity : TauriActivity() {
 
     fun promptApkInstall(apkFile: java.io.File) {
         try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                if (!packageManager.canRequestPackageInstalls()) {
-                    val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                        data = android.net.Uri.parse("package:$packageName")
-                    }
-                    startActivity(intent)
-                }
-            }
-
             val authority = "$packageName.fileprovider"
             val apkUri = androidx.core.content.FileProvider.getUriForFile(this, authority, apkFile)
 
             val installIntent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
                 setDataAndType(apkUri, "application/vnd.android.package-archive")
-                flags = android.content.Intent.ACTION_VIEW.let {
-                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
                     android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
                     android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
-                }
             }
             startActivity(installIntent)
         } catch (e: Throwable) {
             e.printStackTrace()
+            // Secure fallback: open official release in browser
+            try {
+                val browserIntent = android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://github.com/eveyka/Neno-Music-App/releases/latest")
+                ).apply {
+                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(browserIntent)
+            } catch (_: Throwable) {}
             val errMsg = org.json.JSONObject.quote("Cannot launch installer: ${e.message}")
             targetWebView?.evaluateJavascript(
                 "window.dispatchEvent(new CustomEvent('neno-update-download-progress', { detail: { status: 'error', error: $errMsg } }));",
