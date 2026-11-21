@@ -1,7 +1,16 @@
 set(CMAKE_SYSTEM_NAME Android)
 set(CMAKE_SYSTEM_VERSION 26)
 set(ANDROID_PLATFORM 26)
-set(CMAKE_ANDROID_NDK "C:/Users/wwwro/AppData/Local/Android/Sdk/ndk/28.2.13676358")
+
+if(DEFINED ENV{NDK_HOME})
+  set(CMAKE_ANDROID_NDK "$ENV{NDK_HOME}")
+elseif(DEFINED ENV{ANDROID_NDK_HOME})
+  set(CMAKE_ANDROID_NDK "$ENV{ANDROID_NDK_HOME}")
+elseif(DEFINED ENV{ANDROID_NDK})
+  set(CMAKE_ANDROID_NDK "$ENV{ANDROID_NDK}")
+else()
+  set(CMAKE_ANDROID_NDK "C:/Users/wwwro/AppData/Local/Android/Sdk/ndk/28.2.13676358")
+endif()
 
 if(CMAKE_C_FLAGS MATCHES "aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR "$ENV{TARGET}" MATCHES "aarch64" OR "$ENV{CARGO_CFG_TARGET_ARCH}" STREQUAL "aarch64")
   set(ANDROID_ABI arm64-v8a)
@@ -20,6 +29,6 @@ else()
   set(CMAKE_ANDROID_ARCH_ABI arm64-v8a)
 endif()
 
-include("C:/Users/wwwro/AppData/Local/Android/Sdk/ndk/28.2.13676358/build/cmake/android.toolchain.cmake")
+include("${CMAKE_ANDROID_NDK}/build/cmake/android.toolchain.cmake")
 
 

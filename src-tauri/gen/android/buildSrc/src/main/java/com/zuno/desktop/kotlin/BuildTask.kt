@@ -50,12 +50,34 @@ open class BuildTask : DefaultTask() {
         val release = release ?: throw GradleException("release cannot be null")
         val args = listOf("run", "--", "tauri", "android", "android-studio-script")
 
-        val ndkDir = File(System.getenv("ANDROID_HOME") ?: "C:/Users/wwwro/AppData/Local/Android/Sdk", "ndk/28.2.13676358")
-        val llvmBin = File(ndkDir, "toolchains/llvm/prebuilt/windows-x86_64/bin")
-        val cmakeBin = File(System.getenv("ANDROID_HOME") ?: "C:/Users/wwwro/AppData/Local/Android/Sdk", "cmake/3.22.1/bin")
-        val ninjaExe = File(cmakeBin, "ninja.exe")
+        val envNdk = System.getenv("NDK_HOME") ?: System.getenv("ANDROID_NDK_HOME") ?: System.getenv("ANDROID_NDK")
+        val ndkDir = if (envNdk != null && File(envNdk).exists()) {
+            File(envNdk)
+        } else {
+            val sdkDir = File(System.getenv("ANDROID_HOME") ?: "C:/Users/wwwro/AppData/Local/Android/Sdk")
+            val ndkParent = File(sdkDir, "ndk")
+            val installedNdks = ndkParent.listFiles()?.filter { it.isDirectory }?.sortedDescending()
+            installedNdks?.firstOrNull() ?: File(ndkParent, "26.1.10909125")
+        }
+
+        val isWindows = Os.isFamily(Os.FAMILY_WINDOWS)
+        val isMac = Os.isFamily(Os.FAMILY_MAC)
+        val hostTag = when {
+            isWindows -> "windows-x86_64"
+            isMac -> "darwin-x86_64"
+            else -> "linux-x86_64"
+        }
+        val llvmBin = File(ndkDir, "toolchains/llvm/prebuilt/$hostTag/bin")
+
+        val sdkDir = ndkDir.parentFile?.parentFile ?: File(System.getenv("ANDROID_HOME") ?: "C:/Users/wwwro/AppData/Local/Android/Sdk")
+        val cmakeParent = File(sdkDir, "cmake")
+        val installedCmakes = cmakeParent.listFiles()?.filter { it.isDirectory }?.sortedDescending()
+        val cmakeDir = installedCmakes?.firstOrNull() ?: File(cmakeParent, "3.22.1")
+        val cmakeBin = File(cmakeDir, "bin")
+        val ninjaExe = if (isWindows) File(cmakeBin, "ninja.exe") else File(cmakeBin, "ninja")
         val toolchain = File(ndkDir, "build/cmake/android.toolchain.cmake")
         val currentPath = System.getenv("PATH") ?: ""
+        val pathSeparator = File.pathSeparator
 
         val abi = when (target) {
             "aarch64" -> "arm64-v8a"
@@ -80,13 +102,15 @@ open class BuildTask : DefaultTask() {
             workingDir(File(project.projectDir, rootDirRel))
             executable(executable)
             args(args)
-            environment("PATH", "${llvmBin.absolutePath};${cmakeBin.absolutePath};$currentPath")
+            environment("PATH", "${llvmBin.absolutePath}$pathSeparator${cmakeBin.absolutePath}$pathSeparator$currentPath")
             environment("ANDROID_NDK", ndkDir.absolutePath)
             environment("ANDROID_NDK_HOME", ndkDir.absolutePath)
             environment("NDK_HOME", ndkDir.absolutePath)
             environment("ANDROID_ABI", abi)
             environment("CMAKE_TOOLCHAIN_FILE", wrapperToolchain.absolutePath)
-            environment("CMAKE_MAKE_PROGRAM", ninjaExe.absolutePath)
+            if (ninjaExe.exists()) {
+                environment("CMAKE_MAKE_PROGRAM", ninjaExe.absolutePath)
+            }
             environment("CMAKE_GENERATOR", "Ninja")
             if (project.logger.isEnabled(LogLevel.DEBUG)) {
                 args("-vv")
