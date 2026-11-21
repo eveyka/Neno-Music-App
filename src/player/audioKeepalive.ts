@@ -140,6 +140,7 @@ function getOrCreateKeepaliveAudio(): HTMLAudioElement | null {
       audio.preload = "auto";
       audio.setAttribute("playsinline", "true");
       audio.setAttribute("aria-hidden", "true");
+      audio.setAttribute("data-keepalive", "true");
       audio.style.display = "none";
       // 0.001 is completely inaudible to human ears, but non-zero so OS/Chromium
       // audio mixer registers an active media track.

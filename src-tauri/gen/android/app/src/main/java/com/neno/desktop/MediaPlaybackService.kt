@@ -198,9 +198,43 @@ class MediaPlaybackService : Service() {
         resumeHandler.postDelayed(runnable, delayMs)
     }
 
+    private var lastPlayStartTime: Long = 0L
+
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                // NEVER pause on DUCK. This is for notifications, tap/click sounds, and keyboard clicks.
+                // Keep playing smoothly without interrupting the user.
+                return@OnAudioFocusChangeListener
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                // If focus loss arrives within 1800ms of user requesting playback (audio HAL settling / tap sounds), ignore it!
+                if (SystemClock.elapsedRealtime() - lastPlayStartTime < 1800L) {
+                    return@OnAudioFocusChangeListener
+                }
+                val inCall = isSystemInCallMode()
+                if (inCall) {
+                    isCallOngoing = true
+                    pausedDueToInterruption = true
+                    isInterruptedByCall = true
+                    startCallModeMonitoring()
+                    if (isPlaying || currentPlaybackState == "playing") {
+                        dispatchPause(isTransient = true)
+                    }
+                } else {
+                    // Video playback in social apps (Instagram Reels, Twitter, Reddit, etc.) or transient media
+                    if (isPlaying || currentPlaybackState == "playing") {
+                        pausedDueToInterruption = true
+                        isInterruptedByAudioFocus = true
+                        dispatchPause(isTransient = true)
+                    }
+                }
+            }
             AudioManager.AUDIOFOCUS_LOSS -> {
+                // If focus loss arrives within 1800ms of user requesting playback, ignore it!
+                if (SystemClock.elapsedRealtime() - lastPlayStartTime < 1800L) {
+                    return@OnAudioFocusChangeListener
+                }
                 val inCall = isSystemInCallMode()
                 if (inCall || isCallOngoing) {
                     isCallOngoing = true
@@ -216,26 +250,6 @@ class MediaPlaybackService : Service() {
                         pausedDueToInterruption = true
                         isInterruptedByAudioFocus = true
                         // Pause cleanly without abandoning audio focus so we receive AUDIOFOCUS_GAIN when finished
-                        dispatchPause(isTransient = true)
-                    }
-                }
-            }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                val inCall = isSystemInCallMode()
-                if (inCall) {
-                    isCallOngoing = true
-                    pausedDueToInterruption = true
-                    isInterruptedByCall = true
-                    startCallModeMonitoring()
-                    if (isPlaying || currentPlaybackState == "playing") {
-                        dispatchPause(isTransient = true)
-                    }
-                } else {
-                    // Video playback in social apps (Instagram Reels, Twitter, Reddit, etc.) or transient media
-                    if (isPlaying || currentPlaybackState == "playing") {
-                        pausedDueToInterruption = true
-                        isInterruptedByAudioFocus = true
                         dispatchPause(isTransient = true)
                     }
                 }
@@ -359,6 +373,8 @@ class MediaPlaybackService : Service() {
 
     private fun notifyAudioDeviceChanged(delayMs: Long = 450L) {
         if (!isAudioRouteMonitoringActive || isCallOngoing) return
+        // Do not interrupt audio stream with device changed event while fresh playback is initializing
+        if (SystemClock.elapsedRealtime() - lastPlayStartTime < 2500L) return
         pendingRouteChangeRunnable?.let { routeChangeHandler.removeCallbacks(it) }
         val runnable = Runnable {
             pendingRouteChangeRunnable = null
@@ -369,13 +385,7 @@ class MediaPlaybackService : Service() {
     }
 
     private fun handleBluetoothConnecting() {
-        if (!isAudioRouteMonitoringActive || isCallOngoing) return
-        // When bluetooth device begins connecting, pause playback momentarily so no audio glitch/stutter occurs
-        if (isPlaying || currentPlaybackState == "playing") {
-            pausedDueToInterruption = true
-            isInterruptedByBluetoothShift = true
-            dispatchPause(isTransient = true)
-        }
+        // Do not pause on connecting; allow audio to keep playing until fully connected
     }
 
     private fun handleBluetoothConnected() {
@@ -419,8 +429,6 @@ class MediaPlaybackService : Service() {
 
                             if (hasHeadsetOrBt) {
                                 handleBluetoothConnected()
-                            } else {
-                                notifyAudioDeviceChanged(500L)
                             }
                         }
 
@@ -435,8 +443,6 @@ class MediaPlaybackService : Service() {
 
                             if (hadHeadsetOrBt) {
                                 handleBluetoothDisconnected()
-                            } else {
-                                notifyAudioDeviceChanged(500L)
                             }
                         }
                     }
@@ -449,9 +455,6 @@ class MediaPlaybackService : Service() {
             audioRouteReceiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
                     when (intent?.action) {
-                        android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED -> {
-                            handleBluetoothConnecting()
-                        }
                         android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
                             handleBluetoothDisconnected()
                         }
@@ -463,10 +466,6 @@ class MediaPlaybackService : Service() {
                                 handleBluetoothConnected()
                             } else if (state == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
                                 handleBluetoothDisconnected()
-                            } else if (state == android.bluetooth.BluetoothProfile.STATE_CONNECTING) {
-                                handleBluetoothConnecting()
-                            } else {
-                                notifyAudioDeviceChanged(600L)
                             }
                         }
                     }
@@ -618,6 +617,7 @@ class MediaPlaybackService : Service() {
     private fun dispatchPlay() {
         pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
         pendingResumeRunnable = null
+        lastPlayStartTime = SystemClock.elapsedRealtime()
         isPlaying = true
         currentPlaybackState = "playing"
         pausedDueToInterruption = false
@@ -757,6 +757,7 @@ class MediaPlaybackService : Service() {
                 currentPlaybackState = newPlaybackState
 
                 if (newIsPlaying || newPlaybackState == "loading" || newPlaybackState == "playing") {
+                    lastPlayStartTime = SystemClock.elapsedRealtime()
                     isPlaying = (newPlaybackState == "playing" || newPlaybackState == "loading")
                     pausedDueToInterruption = false
                     isInterruptedByCall = false

@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import type { Track } from "../../datasource/types";
 import type { PlayerControllerActions } from "../../player/playerStore";
@@ -20,8 +20,12 @@ export const DailyDiscoverCard = memo(function DailyDiscoverCard({
   className,
 }: DailyDiscoverCardProps) {
   const { openTrackMenu } = useTrackContextMenu();
+  const lastPlayTimeRef = useRef(0);
 
   const handlePlay = () => {
+    const now = Date.now();
+    if (now - lastPlayTimeRef.current < 500) return;
+    lastPlayTimeRef.current = now;
     void playerController.playTrackById(track.id);
   };
 

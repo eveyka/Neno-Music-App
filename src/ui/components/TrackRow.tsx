@@ -400,8 +400,14 @@ export const TrackRow = memo(function TrackRow({
     onToggleSelected,
   };
 
+  const lastSelectTimeRef = useRef(0);
   const handleSelect = useCallback(
-    (event: MouseEvent<HTMLElement>) => handlersRef.current.onSelect(event),
+    (event: MouseEvent<HTMLElement>) => {
+      const now = Date.now();
+      if (now - lastSelectTimeRef.current < 450) return;
+      lastSelectTimeRef.current = now;
+      handlersRef.current.onSelect(event);
+    },
     [],
   );
   const handleContextMenu = useCallback(

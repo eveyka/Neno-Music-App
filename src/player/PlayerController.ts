@@ -228,6 +228,8 @@ export class PlayerController {
   private scrobbleTimerId: number | null = null;
   private playbackSettingsTimerId: ReturnType<typeof setTimeout> | null = null;
   private transitioning = false;
+  private lastPlayTrackId: string | null = null;
+  private lastPlayTrackTime = 0;
   /** Tracks the last Discord RPC snapshot so we only send IPC when something actually changed. */
   private discordLastEmittedKey: string | null = null;
 
@@ -401,6 +403,19 @@ export class PlayerController {
     shufflePlaylist = false,
     queueContext?: QueueContext,
   ): Promise<boolean> {
+    const now = Date.now();
+    // Prevent duplicate calls for the same track within 450ms (e.g. touch + synthetic click)
+    if (
+      this.lastPlayTrackId === videoId &&
+      now - this.lastPlayTrackTime < 450 &&
+      (this.state.status === "loading" || this.state.status === "playing")
+    ) {
+      logInternalInfo("PlayerController.playTrackById debounced duplicate call for same track", { videoId });
+      return true;
+    }
+    this.lastPlayTrackId = videoId;
+    this.lastPlayTrackTime = now;
+
     // Close out whatever was playing first: this is the funnel every track change goes
     // through, so it catches a natural end and a skip with the same one call.
     this.finishPlayReport();
@@ -535,8 +550,18 @@ export class PlayerController {
       await this.ensureTrackLoaded(track);
       if (requestId !== this.playTrackRequestId) return false;
 
-      const playbackStarted = await this.playLoadedTrack();
-      if (!playbackStarted) return false;
+      let playbackStarted = await this.playLoadedTrack();
+      if (!playbackStarted) {
+        logInternalWarn("PlayerController.playTrackById initial playLoadedTrack returned false, retrying once", {
+          trackId: track.id,
+        });
+        playbackStarted = await this.playLoadedTrack();
+      }
+      if (!playbackStarted) {
+        if (requestId !== this.playTrackRequestId) return false;
+        this.setState({ status: "paused", error: null });
+        return false;
+      }
       if (requestId !== this.playTrackRequestId) return false;
 
       this.setState({ status: "playing", error: null });
@@ -1097,6 +1122,13 @@ export class PlayerController {
   async handleAudioOutputDeviceChanged(): Promise<void> {
     if (!usesRustAudioEngine()) return;
     if (this.isRecoveringPlayback) return;
+
+    // If currently loading a track, do NOT interrupt or tear down the loading stream!
+    if (this.state.status === "loading") {
+      logInternalInfo("PlayerController.handleAudioOutputDeviceChanged ignored while track is actively loading");
+      return;
+    }
+
     this.isRecoveringPlayback = true;
 
     try {

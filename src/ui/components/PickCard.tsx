@@ -50,7 +50,7 @@ export function PickCardInner({
   onWarm,
 }: PickCardProps) {
   const tapRef = useRef<{ x: number; y: number } | null>(null);
-  const firedTapRef = useRef(false);
+  const lastSelectTimeRef = useRef(0);
 
   /*
    * The carousel captures the pointer on its stage and preventDefault()s every pointerdown,
@@ -68,11 +68,10 @@ export function PickCardInner({
 
       const travelled = Math.hypot(event.clientX - start.x, event.clientY - start.y);
       if (travelled <= TAP_SLOP_PX) {
-        firedTapRef.current = true;
+        const now = Date.now();
+        if (now - lastSelectTimeRef.current < 600) return;
+        lastSelectTimeRef.current = now;
         onSelect?.();
-        window.setTimeout(() => {
-          firedTapRef.current = false;
-        }, 300);
       }
     };
     const handleCancel = () => {
@@ -89,10 +88,11 @@ export function PickCardInner({
 
   const handleClick = () => {
     if (disabled) return;
-    if (firedTapRef.current) {
-      firedTapRef.current = false;
+    const now = Date.now();
+    if (now - lastSelectTimeRef.current < 600) {
       return;
     }
+    lastSelectTimeRef.current = now;
     onSelect?.();
   };
 

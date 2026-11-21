@@ -258,6 +258,11 @@ export function useAndroidMediaBridge(): void {
           });
           break;
         case "pause":
+          // If a track is actively loading, do NOT cancel/pause it via background bridge!
+          if (getPlayerState().status === "loading") {
+            console.log("[androidMediaBridge] ignoring pause command while track is actively loading");
+            break;
+          }
           void playerController.pause().catch((err) => {
             console.warn("[androidMediaBridge] pause command failed:", err);
           });

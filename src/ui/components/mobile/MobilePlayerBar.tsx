@@ -117,8 +117,12 @@ export function MobilePlayerBarInner({ onOpenNowPlaying, className }: MobilePlay
     return null;
   }
 
+  const lastPlayPauseTimeRef = useRef(0);
   const handlePlayPause = (e: React.MouseEvent) => {
     e.stopPropagation();
+    const now = Date.now();
+    if (now - lastPlayPauseTimeRef.current < 400) return;
+    lastPlayPauseTimeRef.current = now;
     playerController.togglePlayPause();
   };
 
@@ -240,6 +244,8 @@ export function MobilePlayerBarInner({ onOpenNowPlaying, className }: MobilePlay
             <button
               type="button"
               onClick={handlePlayPause}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
               className="flex size-10 items-center justify-center text-white hover:text-white/80 active:scale-90 transition-transform"
               aria-label={isPlaying ? "Pause" : "Play"}
             >
@@ -256,6 +262,8 @@ export function MobilePlayerBarInner({ onOpenNowPlaying, className }: MobilePlay
             <button
               type="button"
               onClick={handleNext}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
               className="flex size-9 items-center justify-center text-white/80 hover:text-white active:scale-90 transition-transform"
               aria-label="Next track"
             >

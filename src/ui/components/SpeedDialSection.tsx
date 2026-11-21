@@ -81,7 +81,11 @@ export const SpeedDialSection = memo(function SpeedDialSection({
     setCurrentPage(pageIndex);
   };
 
+  const lastItemClickTimeRef = useRef(0);
   const handleItemClick = (speedDialItem: SpeedDialItem) => {
+    const now = Date.now();
+    if (now - lastItemClickTimeRef.current < 500) return;
+    lastItemClickTimeRef.current = now;
     switch (speedDialItem.kind) {
       case "track":
         void playerController.playTrackById(speedDialItem.item.id);

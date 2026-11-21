@@ -1620,7 +1620,7 @@ export class AudioEngine {
       if (engine !== this) engine.pauseForPlaybackClaim();
     }
     for (const media of document.querySelectorAll<HTMLMediaElement>("audio, video")) {
-      if (media !== this.audio && media !== this.standbyAudio) {
+      if (media !== this.audio && media !== this.standbyAudio && !media.hasAttribute("data-keepalive")) {
         media.pause();
       }
     }
