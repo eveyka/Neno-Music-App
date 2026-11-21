@@ -954,13 +954,21 @@ export function MobileNowPlayingModal({
       // 1. Vertical Swipe on Poster:
       if (Math.abs(deltaY) > 28 && Math.abs(deltaY) > Math.abs(deltaX)) {
         if (deltaY > 28) {
-          // Swiped DOWN on poster -> minimize player to mini player!
+          // Swiped DOWN on poster -> collapse queue if open, or minimize player to mini player!
           if (queueSheetState === "full") {
             setQueueSheetState("half");
           } else if (queueSheetState === "half") {
             setQueueSheetState("collapsed");
           } else {
             onClose();
+          }
+          return;
+        } else if (deltaY < -28) {
+          // Swiped UP on poster -> open Up Next playing queue!
+          if (queueSheetState === "collapsed") {
+            setQueueSheetState("half");
+          } else if (queueSheetState === "half") {
+            setQueueSheetState("full");
           }
           return;
         }
@@ -1037,27 +1045,27 @@ export function MobileNowPlayingModal({
 
     let nextState: QueueSheetState = queueSheetState;
 
-    if (wasDragging) {
+    if (wasDragging || Math.abs(deltaY) > 18) {
       if (queueSheetState === "collapsed") {
-        if (deltaY < -200) {
+        if (deltaY < -180) {
           nextState = "full";
-        } else if (deltaY < -25) {
+        } else if (deltaY < -18) {
           nextState = "half";
         } else {
           nextState = "collapsed";
         }
       } else if (queueSheetState === "half") {
-        if (deltaY < -50) {
+        if (deltaY < -40) {
           nextState = "full";
-        } else if (deltaY > 50) {
+        } else if (deltaY > 20) {
           nextState = "collapsed";
         } else {
           nextState = "half";
         }
       } else if (queueSheetState === "full") {
-        if (deltaY > 200) {
+        if (deltaY > 160) {
           nextState = "collapsed";
-        } else if (deltaY > 40) {
+        } else if (deltaY > 25) {
           nextState = "half";
         } else {
           nextState = "full";
@@ -1071,6 +1079,48 @@ export function MobileNowPlayingModal({
     }
     setQueueSheetState(nextState);
   };
+
+  // Main player background swipe gestures (swipe up opens Up Next; swipe down minimizes/collapses)
+  const mainPlayerTouchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleMainPlayerTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 0) return;
+    mainPlayerTouchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+    };
+  }, []);
+
+  const handleMainPlayerTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (!mainPlayerTouchStartRef.current || e.changedTouches.length === 0) return;
+      const touch = e.changedTouches[0];
+      const deltaX = touch.clientX - mainPlayerTouchStartRef.current.x;
+      const deltaY = touch.clientY - mainPlayerTouchStartRef.current.y;
+      mainPlayerTouchStartRef.current = null;
+
+      if (Math.abs(deltaY) > 28 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        if (deltaY < -28) {
+          // SWIPE UP anywhere on main player -> Open Up Next Queue!
+          if (queueSheetState === "collapsed") {
+            setQueueSheetState("half");
+          } else if (queueSheetState === "half") {
+            setQueueSheetState("full");
+          }
+        } else if (deltaY > 28) {
+          // SWIPE DOWN -> if Up Next is open, collapse it; if already collapsed, minimize to miniplayer!
+          if (queueSheetState === "full") {
+            setQueueSheetState("half");
+          } else if (queueSheetState === "half") {
+            setQueueSheetState("collapsed");
+          } else {
+            onClose();
+          }
+        }
+      }
+    },
+    [queueSheetState, onClose],
+  );
 
   // Header specific touch gestures (swipe down anywhere on header minimizes)
   const handleHeaderTouchStart = (e: React.TouchEvent) => {
@@ -1105,7 +1155,7 @@ export function MobileNowPlayingModal({
     if (queueTouchStartYRef.current === null) return;
     const deltaY = e.changedTouches[0].clientY - queueTouchStartYRef.current;
 
-    if (queueScrollTopRef.current <= 0 && deltaY > 35) {
+    if (queueScrollTopRef.current <= 12 && deltaY > 24) {
       if (queueSheetState === "full") {
         setQueueSheetState("half");
       } else if (queueSheetState === "half") {
@@ -1400,6 +1450,8 @@ export function MobileNowPlayingModal({
           {/* ── MAIN PLAYER CONTENT (Collapsed & Half States) ── */}
           {queueSheetState !== "full" && (
             <div
+              onTouchStart={handleMainPlayerTouchStart}
+              onTouchEnd={handleMainPlayerTouchEnd}
               className={cn(
                 "flex flex-1 flex-col overflow-hidden z-10",
                 queueSheetState === "half" ? "pb-[52vh]" : audioMode === "lyrics" ? "pb-2" : "pb-16",

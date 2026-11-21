@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { cn } from "@/lib/utils";
+import { cn, formatMinutesSeconds } from "@/lib/utils";
 import {
   ArrowLeftIcon,
   ArrowUpRightIcon,
@@ -853,26 +853,59 @@ export function SearchOverlay({
                 </section>
               )}
 
-              {/* Instant Songs Preview */}
-              {searchResults.tracks.length > 0 && (
-                <section className="flex flex-col gap-1">
+              {/* Instant Songs Preview & Shimmer Loading State */}
+              {isLoading && searchResults.tracks.length === 0 ? (
+                <section className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between px-1">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-white/50">
                       Songs
                     </span>
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-primary animate-pulse">
+                      <SpinnerSteps size={13} color="currentColor" />
+                      <span>Loading songs...</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col divide-y divide-white/5 rounded-2xl bg-[#18181a] border border-white/5 overflow-hidden">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-3 px-3 py-2.5 animate-pulse">
+                        <div className="size-11 shrink-0 rounded-lg bg-white/10" />
+                        <div className="flex flex-1 flex-col gap-1.5 min-w-0">
+                          <div className="h-3.5 w-3/5 rounded bg-white/10" />
+                          <div className="h-2.5 w-2/5 rounded bg-white/5" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : searchResults.tracks.length > 0 ? (
+                <section className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-white/50">
+                        Songs
+                      </span>
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/70">
+                        {searchResults.tracks.length}
+                      </span>
+                      {isLoading && (
+                        <div className="flex items-center gap-1 text-[11px] font-medium text-primary animate-pulse ml-1">
+                          <SpinnerSteps size={12} color="currentColor" />
+                        </div>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => submitQuery(query, false)}
                       className="text-xs font-semibold text-primary hover:underline"
                     >
-                      View all
+                      View all results
                     </button>
                   </div>
-                  <div className="flex flex-col divide-y divide-white/5 rounded-2xl bg-[#181818] border border-white/5 overflow-hidden">
-                    {searchResults.tracks.slice(0, 5).map((track) => (
+                  <div className="flex flex-col divide-y divide-white/5 rounded-2xl bg-[#18181a] border border-white/5 overflow-hidden">
+                    {searchResults.tracks.slice(0, 15).map((track) => (
                       <div
                         key={track.id}
-                        className="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-white/5"
+                        className="group flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-white/5 active:bg-white/10"
                       >
                         <button
                           type="button"
@@ -884,26 +917,32 @@ export function SearchOverlay({
                           }}
                           className="flex min-w-0 flex-1 items-center gap-3 text-left focus:outline-none"
                         >
-                          <TrackArtwork
-                            className="size-11 shrink-0 rounded-lg object-cover"
-                            size={44}
-                            artworkUrl={track.artworkUrl}
-                            iconSize={22}
-                            loading="lazy"
-                          />
+                          <div className="relative size-11 shrink-0 overflow-hidden rounded-lg">
+                            <TrackArtwork
+                              className="size-full object-cover"
+                              size={44}
+                              artworkUrl={track.artworkUrl}
+                              iconSize={22}
+                              loading="lazy"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                              <PlayActiveIcon size={16} className="text-white" />
+                            </div>
+                          </div>
                           <div className="flex min-w-0 flex-1 flex-col">
-                            <span className="truncate text-sm font-medium text-white">
+                            <span className="truncate text-sm font-medium text-white group-hover:text-primary transition-colors">
                               {track.title}
                             </span>
                             <span className="truncate text-xs text-white/50">
                               {track.artist}
+                              {track.durationSec ? ` · ${formatMinutesSeconds(track.durationSec)}` : ""}
                             </span>
                           </div>
                         </button>
                         <button
                           type="button"
                           onClick={(event) => openTrackMenu(event, track)}
-                          className="flex size-8 shrink-0 items-center justify-center text-white/60 hover:text-white"
+                          className="flex size-8 shrink-0 items-center justify-center text-white/60 hover:text-white active:scale-90"
                           aria-label={`Options for ${track.title}`}
                         >
                           <MenuDotsIcon size={18} />
@@ -912,7 +951,7 @@ export function SearchOverlay({
                     ))}
                   </div>
                 </section>
-              )}
+              ) : null}
 
               {/* Instant Artists Preview */}
               {searchResults.artists.length > 0 && (
@@ -965,26 +1004,32 @@ export function SearchOverlay({
             </div>
           ) : (
             /* ────────────── INITIAL YOUTUBE MUSIC SEARCH SCREEN ────────────── */
-            <div className="flex flex-col gap-5 pt-1">
-              {/* SECTION: Recent searches (only shown when there are actual recent searches) */}
+            <div className="flex flex-col gap-4 pt-1">
+              {/* SECTION: Recent searches inside a clean, fixed-boundary structured container */}
               {recentSearches.length > 0 && (
-                <section className="flex flex-col gap-2.5">
-                  <div className="flex items-center justify-between px-1">
-                    <h2 className="text-[15px] font-bold tracking-tight text-white/90">
-                      Recent searches
-                    </h2>
+                <section className="rounded-2xl bg-[#141416] border border-white/10 p-3 shadow-lg flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-white/5 px-0.5">
+                    <div className="flex items-center gap-2">
+                      <ClockIcon size={15} className="text-primary" />
+                      <h2 className="text-[13px] font-bold tracking-tight text-white">
+                        Recent searches
+                      </h2>
+                      <span className="rounded-full bg-white/10 px-2 py-0.2 text-[10px] font-semibold text-white/70">
+                        {recentSearches.length}
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={clearAllRecentSearches}
-                      className="text-xs font-semibold text-white/50 hover:text-white/80 transition-colors"
+                      className="text-[11px] font-semibold text-white/50 hover:text-white transition-colors px-2 py-0.5 rounded-md hover:bg-white/5"
                     >
                       Clear all
                     </button>
                   </div>
 
-                  {/* Horizontal Carousel of Searched Media Items (tracks/artists/albums clicked from search) */}
+                  {/* Horizontal Carousel of Searched Media Items (tracks/artists/albums) */}
                   {searchedMediaItems.length > 0 && (
-                    <div className="flex gap-3 overflow-x-auto pb-2 pt-1 no-scrollbar [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] -mx-1 px-1">
+                    <div className="flex gap-2.5 overflow-x-auto pb-1.5 pt-0.5 no-scrollbar [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
                       {searchedMediaItems.map((item) => (
                         <button
                           key={item.id}
@@ -1003,25 +1048,25 @@ export function SearchOverlay({
                               submitQuery(item.query, false);
                             }
                           }}
-                          className="group flex w-24 shrink-0 flex-col text-left transition-transform active:scale-95"
+                          className="group flex w-20 shrink-0 flex-col text-left transition-transform active:scale-95"
                         >
-                          <div className="relative size-24 overflow-hidden rounded-xl bg-[#212121] shadow-md ring-1 ring-white/5">
+                          <div className="relative size-20 overflow-hidden rounded-xl bg-[#212121] shadow-md ring-1 ring-white/5">
                             <TrackArtwork
                               className={cn(
                                 "size-full object-cover transition-transform duration-300 group-hover:scale-105",
                                 item.type === "artist" && "rounded-full",
                               )}
-                              size={96}
+                              size={80}
                               artworkUrl={item.artworkUrl}
-                              iconSize={36}
+                              iconSize={28}
                               loading="lazy"
                               variant={item.type === "artist" ? "artist" : "track"}
                             />
                           </div>
-                          <span className="mt-1.5 w-full truncate text-[12px] font-medium text-white leading-tight">
+                          <span className="mt-1 w-full truncate text-[11px] font-medium text-white leading-tight">
                             {item.title || item.query}
                           </span>
-                          <span className="w-full truncate text-[10px] text-white/50 leading-tight">
+                          <span className="w-full truncate text-[9px] text-white/50 leading-tight">
                             {item.subtitle || (item.type === "artist" ? "Artist" : item.type === "album" ? "Album" : "Song")}
                           </span>
                         </button>
@@ -1029,45 +1074,45 @@ export function SearchOverlay({
                     </div>
                   )}
 
-                  {/* Recent Search Queries List */}
+                  {/* Recent Search Queries List inside fixed max-height scrollable area */}
                   {searchedQueries.length > 0 && (
-                    <div className="flex flex-col divide-y divide-white/5 mt-1">
+                    <div className="flex flex-col divide-y divide-white/5 max-h-52 overflow-y-auto overscroll-contain pr-1 no-scrollbar">
                       {searchedQueries.map((item) => (
                         <div
                           key={item.id}
-                          className="flex items-center justify-between py-2.5 px-1 hover:bg-white/5 rounded-xl transition-colors"
+                          className="flex items-center justify-between py-2 px-1 hover:bg-white/5 rounded-lg transition-colors group"
                         >
                           <button
                             type="button"
                             onClick={() => submitQuery(item.query, false)}
-                            className="flex flex-1 min-w-0 items-center gap-3.5 text-left focus:outline-none"
+                            className="flex flex-1 min-w-0 items-center gap-2.5 text-left focus:outline-none"
                           >
-                            <ClockIcon size={18} className="shrink-0 text-white/50" />
-                            <span className="truncate text-sm font-medium text-white">
+                            <SearchIcon size={15} className="shrink-0 text-white/40 group-hover:text-white/70" />
+                            <span className="truncate text-xs font-medium text-white">
                               {item.query}
                             </span>
                           </button>
-                          <div className="flex items-center gap-1 shrink-0">
+                          <div className="flex items-center gap-0.5 shrink-0">
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 removeRecentSearch(item.id);
                               }}
-                              className="flex size-8 items-center justify-center text-white/40 hover:text-white active:scale-90"
+                              className="flex size-7 items-center justify-center text-white/40 hover:text-rose-400 active:scale-90"
                               aria-label={`Remove ${item.query}`}
                               title="Remove"
                             >
-                              <CloseIcon size={16} />
+                              <CloseIcon size={14} />
                             </button>
                             <button
                               type="button"
                               onClick={() => handleFillQuery(item.query)}
-                              className="flex size-8 shrink-0 items-center justify-center text-white/50 hover:text-white active:scale-90"
+                              className="flex size-7 shrink-0 items-center justify-center text-white/40 hover:text-white active:scale-90"
                               aria-label={`Insert ${item.query}`}
                               title="Insert query"
                             >
-                              <ArrowUpRightIcon size={18} />
+                              <ArrowUpRightIcon size={15} />
                             </button>
                           </div>
                         </div>
