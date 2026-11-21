@@ -21,8 +21,8 @@ android {
         applicationId = "com.neno.desktop"
         minSdk = 26
         targetSdk = 36
-        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "3").toInt()
-        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.3")
+        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "4").toInt()
+        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0.4")
     }
     signingConfigs {
         create("release") {

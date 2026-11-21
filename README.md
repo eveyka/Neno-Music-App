@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/eveyka/Neno-Music-App/releases/tag/v1.0.3"><img src="https://img.shields.io/badge/version-v1.0.3-ff1744?style=for-the-badge&logo=android&logoColor=white" alt="Version 1.0.3"></a>
-  <a href="https://github.com/eveyka/Neno-Music-App/releases/tag/v1.0.3"><img src="https://img.shields.io/badge/platform-Android%20%7C%20iOS%20%7C%20Windows%20%7C%20macOS%20%7C%20Linux-4f46e5?style=for-the-badge" alt="Platforms"></a>
+  <a href="https://github.com/eveyka/Neno-Music-App/releases/tag/v1.0.4"><img src="https://img.shields.io/badge/version-v1.0.4-ff1744?style=for-the-badge&logo=android&logoColor=white" alt="Version 1.0.4"></a>
+  <a href="https://github.com/eveyka/Neno-Music-App/releases/tag/v1.0.4"><img src="https://img.shields.io/badge/platform-Android%20%7C%20iOS%20%7C%20Windows%20%7C%20macOS%20%7C%20Linux-4f46e5?style=for-the-badge" alt="Platforms"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-00e676?style=for-the-badge" alt="License"></a>
   <a href="https://github.com/eveyka/Neno-Music-App/stargazers"><img src="https://img.shields.io/github/stars/eveyka/Neno-Music-App?style=for-the-badge&color=ff9100&label=stars" alt="Stars"></a>
 </p>
@@ -135,15 +135,15 @@ Unlike web tabs and bulky Electron wrappers, Neon Music is powered by **Tauri 2*
 
 ## 📥 Downloads & Installation
 
-Official binaries and APKs are available on the **[Releases Page (v1.0.3)](https://github.com/eveyka/Neno-Music-App/releases/tag/v1.0.3)**:
+Official binaries and APKs are available on the **[Releases Page (v1.0.4)](https://github.com/eveyka/Neno-Music-App/releases/tag/v1.0.4)**:
 
 | Platform | Download Package | Details |
 |---|---|---|
-| **Android (ARM64)** | [Neon-Music-v1.0.3-arm64-v8a.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.3/Neon-Music-v1.0.3-arm64-v8a.apk) | **Recommended** for modern phones (~11.3 MB) |
-| **Android (Universal)** | [Neon-Music-v1.0.3-universal.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.3/Neon-Music-v1.0.3-universal.apk) | Compatible with all Android architectures (~35 MB) |
-| **Android (ARM32)** | [Neon-Music-v1.0.3-armeabi-v7a.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.3/Neon-Music-v1.0.3-armeabi-v7a.apk) | For legacy 32-bit Android devices (~10 MB) |
-| **iOS (iPhone / iPad)** | [Neno-Music-v1.0.3-iOS.ipa](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.3/Neno-Music-v1.0.3-iOS.ipa) | Sideload via AltStore, Sideloadly, TrollStore |
-| **Windows / macOS / Linux** | [Desktop Releases](https://github.com/eveyka/Neno-Music-App/releases/tag/v1.0.3) | Direct MSI, DMG, AppImage, and DEB builds |
+| **Android (ARM64)** | [Neon-Music-v1.0.4-arm64-v8a.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.4/Neon-Music-v1.0.4-arm64-v8a.apk) | **Recommended** for modern phones (~11.3 MB) |
+| **Android (Universal)** | [Neon-Music-v1.0.4-universal.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.4/Neon-Music-v1.0.4-universal.apk) | Compatible with all Android architectures (~35 MB) |
+| **Android (ARM32)** | [Neon-Music-v1.0.4-armeabi-v7a.apk](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.4/Neon-Music-v1.0.4-armeabi-v7a.apk) | For legacy 32-bit Android devices (~10 MB) |
+| **iOS (iPhone / iPad)** | [Neno-Music-v1.0.4-iOS.ipa](https://github.com/eveyka/Neno-Music-App/releases/download/v1.0.4/Neno-Music-v1.0.4-iOS.ipa) | Sideload via AltStore, Sideloadly, TrollStore |
+| **Windows / macOS / Linux** | [Desktop Releases](https://github.com/eveyka/Neno-Music-App/releases/tag/v1.0.4) | Direct MSI, DMG, AppImage, and DEB builds |
 
 > **Android Installation Note**: If installing an APK directly, ensure "Install unknown apps" permission is enabled for your browser or file manager.
 

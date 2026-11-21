@@ -331,20 +331,24 @@ class MediaPlaybackService : Service() {
     private val serviceKeepaliveRunnable = object : Runnable {
         override fun run() {
             try {
-                MainActivity.instance?.let { act ->
-                    act.runOnUiThread {
-                        val wv = act.targetWebView ?: act.window?.decorView?.let { act.findWebView(it) }?.also { act.targetWebView = it }
-                        wv?.let {
-                            it.onResume()
-                            it.resumeTimers()
-                            val tickJs = "if (typeof window.__neno_background_tick === 'function') { window.__neno_background_tick(); } else { void 0; }"
-                            it.evaluateJavascript(tickJs, null)
-                            it.loadUrl("javascript:(function(){try{" + tickJs + "}catch(e){}})()")
+                if (isPlaying || currentPlaybackState == "playing" || currentPlaybackState == "loading") {
+                    MainActivity.instance?.let { act ->
+                        act.runOnUiThread {
+                            val wv = act.targetWebView ?: act.window?.decorView?.let { act.findWebView(it) }?.also { act.targetWebView = it }
+                            wv?.let {
+                                val tickJs = "if (typeof window.__neno_background_tick === 'function') { window.__neno_background_tick(); }"
+                                try {
+                                    it.evaluateJavascript(tickJs, null)
+                                } catch (_: Throwable) {
+                                    it.loadUrl("javascript:(function(){try{" + tickJs + "}catch(e){}})()")
+                                }
+                            }
                         }
                     }
                 }
             } catch (_: Throwable) {}
-            serviceKeepaliveHandler.postDelayed(this, 1000)
+            val nextDelay = if (isPlaying || currentPlaybackState == "playing" || currentPlaybackState == "loading") 1000L else 5000L
+            serviceKeepaliveHandler.postDelayed(this, nextDelay)
         }
     }
 
@@ -866,7 +870,19 @@ class MediaPlaybackService : Service() {
                         connection.inputStream.use { stream ->
                             val bitmap = BitmapFactory.decodeStream(stream)
                             if (bitmap != null && bitmap.width > 20 && bitmap.height > 20) {
-                                loaded = bitmap
+                                // Downscale to max 512px for notification shade to prevent high RAM consumption and GC pauses
+                                val maxDim = 512
+                                if (bitmap.width > maxDim || bitmap.height > maxDim) {
+                                    val scale = maxDim.toFloat() / Math.max(bitmap.width, bitmap.height)
+                                    val scaledW = Math.max(1, Math.round(bitmap.width * scale))
+                                    val scaledH = Math.max(1, Math.round(bitmap.height * scale))
+                                    loaded = Bitmap.createScaledBitmap(bitmap, scaledW, scaledH, true)
+                                    if (loaded != bitmap) {
+                                        bitmap.recycle()
+                                    }
+                                } else {
+                                    loaded = bitmap
+                                }
                             }
                         }
                     }
