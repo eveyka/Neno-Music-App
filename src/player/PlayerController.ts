@@ -197,6 +197,7 @@ export class PlayerController {
   private pendingSeekTime: number | null = null;
   private lastValidPlaybackPositionSec = 0;
   private isRecoveringPlayback = false;
+  private activeStreamData: { trackId: string; data: StreamData } | null = null;
   private radioQueueRequestId = 0;
   /*
    * "End queue on this song": the queue entry after which playback stops.
@@ -595,6 +596,10 @@ export class PlayerController {
   }
 
   async play(): Promise<void> {
+    if (this.isRecoveringPlayback) {
+      logInternalInfo("PlayerController.play ignored because recovery is already in progress");
+      return;
+    }
     logInternalInfo("PlayerController.play start", {
       currentStatus: this.state.status,
       currentTrackId: this.state.currentTrack?.id ?? null,
@@ -1214,19 +1219,10 @@ export class PlayerController {
 
     try {
       if (usesRustAudioEngine()) {
-        // Fast path: if the track is still loaded on the deck, resume directly
-        if (this.loadedTrackId === track.id && this.audioEngine.isDeckLoaded(track.id)) {
-          try {
-            const started = await this.playLoadedTrack();
-            if (started) {
-              this.setState({ status: "playing", error: null });
-              return;
-            }
-          } catch {
-            // Audio output route invalidated by Telecom HAL, fall through to refresh
-          }
-        }
-
+        // ALWAYS refresh the hardware audio sink on mobile/Android after a phone call!
+        // During an active phone call, Android Telecom HAL takes over the hardware audio stream,
+        // invalidating/disconnecting any open AAudio/Oboe streams. Calling setOutputDevice(null)
+        // cleanly drops the disconnected stream and binds a fresh output endpoint.
         try {
           await setOutputDevice(null);
         } catch (err) {
@@ -1235,19 +1231,38 @@ export class PlayerController {
           });
         }
 
+        this.loadedTrackId = null;
+        this.audioEngine.stop();
+
         let started = false;
 
         // 1st Attempt: If we had a valid position > 2 seconds, try resuming at that position
         if (resumePos > 2) {
           try {
-            this.loadedTrackId = null;
-            this.audioEngine.stop();
             this.pendingSeekTime = resumePos;
-            await this.ensureTrackLoaded(track);
-            try {
-              this.audioEngine.seekTo(resumePos);
-            } catch {
-              // ignore seek failure
+            if (this.activeStreamData?.trackId === track.id) {
+              const cached = this.activeStreamData.data;
+              await this.audioEngine.loadTrack(
+                track.id,
+                cached.bytes,
+                cached.mimeType,
+                cached.sourceUrl,
+                cached.rustSource,
+                track.durationSec,
+              );
+              this.loadedTrackId = track.id;
+              try {
+                this.audioEngine.seekTo(resumePos);
+              } catch {
+                // ignore seek failure
+              }
+            } else {
+              await this.ensureTrackLoaded(track);
+              try {
+                this.audioEngine.seekTo(resumePos);
+              } catch {
+                // ignore seek failure
+              }
             }
             started = await this.playLoadedTrack();
             if (started) {
@@ -1656,6 +1671,7 @@ export class PlayerController {
           track.durationSec,
         );
         this.loadedTrackId = track.id;
+        this.activeStreamData = { trackId: track.id, data: audioData };
         if (this.pendingSeekTime !== null) {
           this.audioEngine.seekTo(this.pendingSeekTime);
           this.pendingSeekTime = null;
@@ -1722,6 +1738,7 @@ export class PlayerController {
             audioData.rustSource,
             track.durationSec,
           );
+          this.activeStreamData = { trackId: track.id, data: audioData };
         } else {
           try {
             await this.audioEngine.loadTrack(
@@ -1732,6 +1749,9 @@ export class PlayerController {
               audioData?.rustSource,
               track.durationSec,
             );
+            if (audioData) {
+              this.activeStreamData = { trackId: track.id, data: audioData };
+            }
           } catch (loadErr) {
             // If we attempted with a warmed slot and it failed, re-resolve fresh once.
             if (validWarmed && useNativeAudio && this.dataSource.getStreamData) {
@@ -1747,6 +1767,9 @@ export class PlayerController {
                 audioData?.rustSource,
                 track.durationSec,
               );
+              if (audioData) {
+                this.activeStreamData = { trackId: track.id, data: audioData };
+              }
             } else {
               throw loadErr;
             }

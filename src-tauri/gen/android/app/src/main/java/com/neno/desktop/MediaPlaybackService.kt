@@ -140,12 +140,16 @@ class MediaPlaybackService : Service() {
             (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && currentMode == AudioManager.MODE_CALL_SCREENING)
     }
 
+    private var callModeMonitoringStartMs: Long = 0L
+
     private val callModeCheckRunnable = object : Runnable {
         override fun run() {
             if (!isCallOngoing || !isCallMonitoringActive) return
             val isStillInCall = isSystemInCallMode()
 
-            if (!isStillInCall) {
+            val elapsed = SystemClock.elapsedRealtime() - callModeMonitoringStartMs
+            // If system has returned to normal mode, or safety fallback after 25 seconds if focus is available
+            if (!isStillInCall || (elapsed > 25000L && hasAudioFocus)) {
                 stopCallModeMonitoring()
                 handleCallEnded()
             } else {
@@ -157,6 +161,7 @@ class MediaPlaybackService : Service() {
     private fun startCallModeMonitoring() {
         if (!isCallMonitoringActive) {
             isCallMonitoringActive = true
+            callModeMonitoringStartMs = SystemClock.elapsedRealtime()
             callModeCheckHandler.removeCallbacks(callModeCheckRunnable)
             callModeCheckHandler.postDelayed(callModeCheckRunnable, 500L)
         }
@@ -169,25 +174,38 @@ class MediaPlaybackService : Service() {
 
     private fun handleCallEnded() {
         val wasOngoing = isCallOngoing
-        val shouldResume = (wasOngoing || isInterruptedByCall) && pausedDueToInterruption
+        val shouldResume = (wasOngoing || isInterruptedByCall || isInterruptedByAudioFocus) && (pausedDueToInterruption || isInterruptedByCall)
         isCallOngoing = false
         pausedDueToInterruption = false
         isInterruptedByCall = false
+        isInterruptedByAudioFocus = false
+        isInterruptedByBluetoothShift = false
         stopCallModeMonitoring()
 
         pendingResumeRunnable?.let { resumeHandler.removeCallbacks(it) }
         pendingResumeRunnable = null
 
-        // Wait 450ms for Android audioserver to restore media routing from telecom to media HAL
-        resumeHandler.postDelayed({
-            val resumePos = if (positionSec > 0L) positionSec else lastPlaybackPositionSec
-            if (shouldResume) {
-                // Resume playback directly on the freshly recreated audio stream at exact timestamp
+        if (shouldResume) {
+            // Restore playback state immediately so notification and Android system know playback has resumed
+            lastPlayStartTime = SystemClock.elapsedRealtime()
+            isPlaying = true
+            currentPlaybackState = "playing"
+            acquireWakeLock()
+            requestAudioFocus()
+            registerNoisyReceiver()
+            updateNotification()
+
+            // Wait 500ms for Android audioserver to restore media routing from telecom to media HAL
+            resumeHandler.postDelayed({
+                val resumePos = if (positionSec > 0L) positionSec else lastPlaybackPositionSec
                 sendMediaCommand("resumeFromCall:$resumePos")
-            } else {
+                sendMediaCommand("play")
+            }, 500L)
+        } else {
+            resumeHandler.postDelayed({
                 sendMediaCommand("audioDeviceChanged")
-            }
-        }, 450L)
+            }, 500L)
+        }
     }
 
     private fun scheduleResumePlayback(delayMs: Long) {
@@ -259,18 +277,24 @@ class MediaPlaybackService : Service() {
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 hasAudioFocus = true
-                if (isCallOngoing) {
-                    if (isSystemInCallMode()) {
-                        // Call is still active according to audio manager mode, wait until ended
-                        return@OnAudioFocusChangeListener
-                    }
+                val inCall = isSystemInCallMode()
+                if (inCall) {
+                    // System audio is still routed through telecom mode; keep monitoring until returned to normal
+                    isCallOngoing = true
+                    pausedDueToInterruption = true
+                    isInterruptedByCall = true
+                    startCallModeMonitoring()
+                    return@OnAudioFocusChangeListener
+                }
+
+                if (isCallOngoing || isInterruptedByCall) {
                     handleCallEnded()
                 } else if (pausedDueToInterruption && (isInterruptedByAudioFocus || isInterruptedByBluetoothShift)) {
                     pausedDueToInterruption = false
                     isInterruptedByAudioFocus = false
                     isInterruptedByBluetoothShift = false
                     // The other video/media has officially finished or yielded audio focus back; auto-resume!
-                    scheduleResumePlayback(300L)
+                    scheduleResumePlayback(400L)
                 }
             }
         }
@@ -596,7 +620,7 @@ class MediaPlaybackService : Service() {
             }
             TelephonyManager.CALL_STATE_IDLE -> {
                 // Call ended ("call cut hone ke baad")! Auto-resume playback on fresh stream.
-                if (isCallOngoing || isInterruptedByCall) {
+                if (isCallOngoing || isInterruptedByCall || pausedDueToInterruption) {
                     handleCallEnded()
                 }
             }

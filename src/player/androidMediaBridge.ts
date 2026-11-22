@@ -245,9 +245,15 @@ export function useAndroidMediaBridge(): void {
 
       if (command.startsWith("resumeFromCall:")) {
         const sec = parseFloat(command.substring(15));
-        void playerController.resumeAfterCall?.(isNaN(sec) ? 0 : sec).catch((err) => {
-          console.warn("[androidMediaBridge] resumeAfterCall failed:", err);
-        });
+        const pos = isNaN(sec) ? 0 : sec;
+        if (typeof playerController.resumeAfterCall === "function") {
+          void playerController.resumeAfterCall(pos).catch((err) => {
+            console.warn("[androidMediaBridge] resumeAfterCall failed, falling back to play:", err);
+            void playerController.play().catch(() => {});
+          });
+        } else {
+          void playerController.play().catch(() => {});
+        }
         return;
       }
 

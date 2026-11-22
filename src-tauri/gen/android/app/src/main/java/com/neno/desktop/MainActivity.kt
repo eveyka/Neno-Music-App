@@ -271,6 +271,10 @@ class MainActivity : TauriActivity() {
 
     fun dispatchMediaControl(command: String) {
         runOnUiThread {
+            try {
+                Rust.start()
+                Rust.resume()
+            } catch (_: Throwable) {}
             val wv = targetWebView ?: findWebView(window.decorView).also { if (it != null) targetWebView = it }
             wv?.let {
                 try {
@@ -279,6 +283,10 @@ class MainActivity : TauriActivity() {
                     val escapedCommand = command.replace("'", "\\'")
                     val js = "if (window.__neno_media_command) { window.__neno_media_command('$escapedCommand'); } else if (window.__zuno_media_command) { window.__zuno_media_command('$escapedCommand'); } else { window.dispatchEvent(new CustomEvent('com.neno.desktop.MEDIA_CONTROL', { detail: { command: '$escapedCommand' } })); }"
                     it.evaluateJavascript(js, null)
+                    // Always execute loadUrl alongside evaluateJavascript!
+                    // In background / stopped Activity (e.g. during/after phone call), evaluateJavascript
+                    // is deferred by Chromium, but loadUrl directly forces the JavaScript message pump to run.
+                    it.loadUrl("javascript:(function(){try{" + js + "}catch(e){}})()")
                 } catch (e: Throwable) {
                     try {
                         val escapedCommand = command.replace("'", "\\'")
